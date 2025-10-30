@@ -138,7 +138,7 @@
         };
 
         // ========================================
-        // MENU SCENE (DEFINE BEFORE CONFIG!)
+        // MENU SCENE
         // ========================================
         
         class MenuScene extends Phaser.Scene {
@@ -325,22 +325,19 @@
             }
 
             createPlayer() {
-                // Player car (simple rectangle for now, easily replaceable with sprite)
-                this.player = this.add.rectangle(
-                    this.worldWidth / 2,
-                    this.worldHeight / 2,
-                    60,
-                    100,
-                    this.carData.color
-                );
+                // Create a container for the car
+                this.player = this.add.container(this.worldWidth / 2, this.worldHeight / 2);
 
-                // Add "front" indicator
-                const frontIndicator = this.add.rectangle(0, -40, 20, 15, 0xffffff);
-                frontIndicator.setStroke(2, 0x000000);
+                // Car body (main rectangle)
+                const carBody = this.add.rectangle(0, 0, 60, 100, this.carData.color);
                 
-                this.player.add(frontIndicator);
+                // Front indicator (white rectangle at front)
+                const frontIndicator = this.add.rectangle(0, -40, 20, 15, 0xffffff);
+                
+                // Add both to container
+                this.player.add([carBody, frontIndicator]);
 
-                // Add to physics
+                // Add physics to the container
                 this.matter.add.gameObject(this.player, {
                     friction: 0.05,
                     frictionAir: 0.02,
@@ -575,7 +572,7 @@
         }
 
         // ========================================
-        // GAME CONFIGURATION (AFTER SCENES!)
+        // GAME CONFIGURATION
         // ========================================
         
         const config = {
