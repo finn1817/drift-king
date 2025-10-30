@@ -107,32 +107,6 @@
     <!-- Game Code -->
     <script>
         // ========================================
-        // GAME CONFIGURATION
-        // ========================================
-        
-        const config = {
-            type: Phaser.AUTO,
-            width: 1280,
-            height: 720,
-            parent: 'gameContainer',
-            backgroundColor: '#2d2d2d',
-            physics: {
-                default: 'matter',
-                matter: {
-                    gravity: { x: 0, y: 0 },
-                    debug: false, // Set to true to see collision boxes
-                    enableSleeping: false
-                }
-            },
-            scene: [MenuScene, GameScene],
-            input: {
-                gamepad: true
-            }
-        };
-
-        const game = new Phaser.Game(config);
-
-        // ========================================
         // CAR DATA
         // ========================================
         
@@ -164,7 +138,7 @@
         };
 
         // ========================================
-        // MENU SCENE
+        // MENU SCENE (DEFINE BEFORE CONFIG!)
         // ========================================
         
         class MenuScene extends Phaser.Scene {
@@ -599,6 +573,32 @@
                 this.player.rotation = 0;
             }
         }
+
+        // ========================================
+        // GAME CONFIGURATION (AFTER SCENES!)
+        // ========================================
+        
+        const config = {
+            type: Phaser.AUTO,
+            width: 1280,
+            height: 720,
+            parent: 'gameContainer',
+            backgroundColor: '#2d2d2d',
+            physics: {
+                default: 'matter',
+                matter: {
+                    gravity: { x: 0, y: 0 },
+                    debug: false, // Set to true to see collision boxes
+                    enableSleeping: false
+                }
+            },
+            scene: [MenuScene, GameScene],
+            input: {
+                gamepad: true
+            }
+        };
+
+        const game = new Phaser.Game(config);
     </script>
 </body>
 </html>
