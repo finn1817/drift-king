@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRIFT KING - Semi-Realistic Drifting Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            border: 3px solid #fff;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+        }
+
+        /* HUD Overlay */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        #hud div {
+            margin-bottom: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 15px;
+            border-radius: 8px;
+            display: inline-block;
+            min-width: 200px;
+        }
+
+        .label {
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        /* Controls Info */
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 300px;
+        }
+
+        #controls h3 {
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+
+        #controls p {
+            margin: 5px 0;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer"></div>
+    
+    <!-- HUD -->
+    <div id="hud">
+        <div><span class="label">Speed:</span> <span id="speedDisplay">0</span> MPH</div>
+        <div><span class="label">Car:</span> <span id="carType">Drift King</span></div>
+        <div><span class="label">Track:</span> <span id="trackName">The Lot</span></div>
+        <div><span class="label">Weather:</span> <span id="weather">Clear</span></div>
+    </div>
+
+    <!-- Controls Guide -->
+    <div id="controls">
+        <h3>🎮 CONTROLS</h3>
+        <p><strong>WASD / Left Stick:</strong> Drive</p>
+        <p><strong>SPACE / LB:</strong> Handbrake (Drift)</p>
+        <p><strong>Right Stick:</strong> Pan Camera</p>
+        <p><strong>R:</strong> Reset Car</p>
+        <p><strong>T:</strong> Toggle Rain</p>
+        <p><strong>ESC:</strong> Menu</p>
+    </div>
+
+    <!-- Phaser 3 -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+
+    <!-- Game Code -->
+    <script>
+        // ========================================
+        // GAME CONFIGURATION
+        // ========================================
+        
+        const config = {
+            type: Phaser.AUTO,
+            width: 1280,
+            height: 720,
+            parent: 'gameContainer',
+            backgroundColor: '#2d2d2d',
+            physics: {
+                default: 'matter',
+                matter: {
+                    gravity: { x: 0, y: 0 },
+                    debug: false, // Set to true to see collision boxes
+                    enableSleeping: false
+                }
+            },
+            scene: [MenuScene, GameScene],
+            input: {
+                gamepad: true
+            }
+        };
+
+        const game = new Phaser.Game(config);
+
+        // ========================================
+        // CAR DATA
+        // ========================================
+        
+        const CAR_TYPES = {
+            drift: {
+                name: "Drift King",
+                topSpeed: 280,
+                acceleration: 7,
+                handling: 9,
+                driftFactor: 10,
+                color: 0xff4444
+            },
+            speed: {
+                name: "Speedster",
+                topSpeed: 350,
+                acceleration: 8,
+                handling: 6,
+                driftFactor: 5,
+                color: 0x4444ff
+            },
+            fun: {
+                name: "All-Rounder",
+                topSpeed: 300,
+                acceleration: 8,
+                handling: 8,
+                driftFactor: 7,
+                color: 0x44ff44
+            }
+        };
+
+        // ========================================
+        // MENU SCENE
+        // ========================================
+        
+        class MenuScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'MenuScene' });
+            }
+
+            create() {
+                // Title
+                this.add.text(640, 150, 'DRIFT KING', {
+                    fontSize: '72px',
+                    fontFamily: 'Arial Black',
+                    fill: '#ffd700',
+                    stroke: '#000',
+                    strokeThickness: 8
+                }).setOrigin(0.5);
+
+                this.add.text(640, 220, 'Semi-Realistic Drifting Experience', {
+                    fontSize: '24px',
+                    fill: '#fff'
+                }).setOrigin(0.5);
+
+                // Track Selection
+                this.add.text(640, 300, 'SELECT TRACK:', {
+                    fontSize: '32px',
+                    fill: '#ffd700'
+                }).setOrigin(0.5);
+
+                const tracks = [
+                    { name: 'The Lot (Parking Lot)', key: 'lot', y: 360 },
+                    { name: 'The Circle (Short Track)', key: 'circle', y: 410 },
+                    { name: 'Daytona 500 (NASCAR Oval)', key: 'daytona', y: 460 },
+                    { name: 'Touge Pass (Drift Track)', key: 'touge', y: 510 }
+                ];
+
+                tracks.forEach((track, index) => {
+                    const btn = this.add.text(640, track.y, track.name, {
+                        fontSize: '24px',
+                        fill: '#fff',
+                        backgroundColor: index === 0 ? '#44aa44' : '#666',
+                        padding: { x: 20, y: 10 }
+                    }).setOrigin(0.5).setInteractive();
+
+                    if (index === 0) {
+                        // Only parking lot is available in demo
+                        btn.on('pointerdown', () => {
+                            this.scene.start('GameScene', { track: track.key, car: 'drift' });
+                        });
+                        btn.on('pointerover', () => btn.setStyle({ fill: '#ffd700' }));
+                        btn.on('pointerout', () => btn.setStyle({ fill: '#fff' }));
+                    } else {
+                        btn.setAlpha(0.5);
+                        this.add.text(880, track.y, '(Coming Soon)', {
+                            fontSize: '18px',
+                            fill: '#999'
+                        }).setOrigin(0.5);
+                    }
+                });
+
+                // Instructions
+                this.add.text(640, 600, 'Click a track to start!', {
+                    fontSize: '18px',
+                    fill: '#aaa'
+                }).setOrigin(0.5);
+            }
+        }
+
+        // ========================================
+        // MAIN GAME SCENE
+        // ========================================
+        
+        class GameScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'GameScene' });
+            }
+
+            init(data) {
+                this.selectedTrack = data.track || 'lot';
+                this.selectedCar = data.car || 'drift';
+                this.isRaining = false;
+            }
+
+            create() {
+                // Car stats
+                this.carData = CAR_TYPES[this.selectedCar];
+                document.getElementById('carType').textContent = this.carData.name;
+                document.getElementById('trackName').textContent = this.getTrackName(this.selectedTrack);
+
+                // Create the world
+                this.createWorld();
+                this.createPlayer();
+                this.setupCamera();
+                this.setupControls();
+
+                // Update HUD
+                this.updateHUD();
+            }
+
+            getTrackName(key) {
+                const names = {
+                    lot: 'The Lot (Parking Lot)',
+                    circle: 'The Circle',
+                    daytona: 'Daytona 500',
+                    touge: 'Touge Pass'
+                };
+                return names[key] || 'Unknown';
+            }
+
+            createWorld() {
+                // Create a large parking lot (3000x3000 for now)
+                this.worldWidth = 3000;
+                this.worldHeight = 3000;
+
+                // Ground
+                const ground = this.add.rectangle(
+                    this.worldWidth / 2,
+                    this.worldHeight / 2,
+                    this.worldWidth,
+                    this.worldHeight,
+                    0x444444
+                );
+
+                // Parking lines (visual only)
+                const graphics = this.add.graphics();
+                graphics.lineStyle(3, 0xffff00, 0.5);
+
+                // Draw parking grid
+                for (let x = 200; x < this.worldWidth; x += 150) {
+                    graphics.lineBetween(x, 100, x, this.worldHeight - 100);
+                }
+                for (let y = 200; y < this.worldHeight; y += 100) {
+                    graphics.lineBetween(100, y, this.worldWidth - 100, y);
+                }
+
+                // Walls (collision boundaries)
+                this.createWalls();
+
+                // Add some obstacles (buildings/cones)
+                this.createObstacles();
+            }
+
+            createWalls() {
+                const wallThickness = 50;
+                const walls = [
+                    // Top wall
+                    { x: this.worldWidth / 2, y: 25, w: this.worldWidth, h: wallThickness },
+                    // Bottom wall
+                    { x: this.worldWidth / 2, y: this.worldHeight - 25, w: this.worldWidth, h: wallThickness },
+                    // Left wall
+                    { x: 25, y: this.worldHeight / 2, w: wallThickness, h: this.worldHeight },
+                    // Right wall
+                    { x: this.worldWidth - 25, y: this.worldHeight / 2, w: wallThickness, h: this.worldHeight }
+                ];
+
+                walls.forEach(wall => {
+                    const wallRect = this.add.rectangle(wall.x, wall.y, wall.w, wall.h, 0x8b4513);
+                    this.matter.add.gameObject(wallRect, { isStatic: true, friction: 0.1 });
+                });
+            }
+
+            createObstacles() {
+                // Random buildings/barriers scattered around
+                const obstacleCount = 15;
+                for (let i = 0; i < obstacleCount; i++) {
+                    const x = Phaser.Math.Between(300, this.worldWidth - 300);
+                    const y = Phaser.Math.Between(300, this.worldHeight - 300);
+                    const width = Phaser.Math.Between(80, 150);
+                    const height = Phaser.Math.Between(80, 150);
+
+                    const building = this.add.rectangle(x, y, width, height, 0x666666);
+                    this.matter.add.gameObject(building, { isStatic: true, friction: 0.1 });
+
+                    // Add roof detail
+                    this.add.rectangle(x, y, width - 10, height - 10, 0x555555);
+                }
+
+                // Traffic cones
+                for (let i = 0; i < 20; i++) {
+                    const x = Phaser.Math.Between(200, this.worldWidth - 200);
+                    const y = Phaser.Math.Between(200, this.worldHeight - 200);
+                    const cone = this.add.circle(x, y, 15, 0xff8800);
+                    this.matter.add.gameObject(cone, { friction: 0.8, restitution: 0.3 });
+                }
+            }
+
+            createPlayer() {
+                // Player car (simple rectangle for now, easily replaceable with sprite)
+                this.player = this.add.rectangle(
+                    this.worldWidth / 2,
+                    this.worldHeight / 2,
+                    60,
+                    100,
+                    this.carData.color
+                );
+
+                // Add "front" indicator
+                const frontIndicator = this.add.rectangle(0, -40, 20, 15, 0xffffff);
+                frontIndicator.setStroke(2, 0x000000);
+                
+                this.player.add(frontIndicator);
+
+                // Add to physics
+                this.matter.add.gameObject(this.player, {
+                    friction: 0.05,
+                    frictionAir: 0.02,
+                    mass: 100,
+                    restitution: 0.1
+                });
+
+                // Car properties
+                this.player.carSpeed = 0;
+                this.player.maxSpeed = this.carData.topSpeed;
+                this.player.acceleration = this.carData.acceleration;
+                this.player.handling = this.carData.handling;
+                this.player.driftFactor = this.carData.driftFactor;
+                this.player.isDrifting = false;
+            }
+
+            setupCamera() {
+                this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+                this.cameras.main.setZoom(0.8);
+                this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
+
+                // Camera pan offset (for right stick)
+                this.cameraPanX = 0;
+                this.cameraPanY = 0;
+            }
+
+            setupControls() {
+                // Keyboard
+                this.keys = this.input.keyboard.addKeys({
+                    up: Phaser.Input.Keyboard.KeyCodes.W,
+                    down: Phaser.Input.Keyboard.KeyCodes.S,
+                    left: Phaser.Input.Keyboard.KeyCodes.A,
+                    right: Phaser.Input.Keyboard.KeyCodes.D,
+                    handbrake: Phaser.Input.Keyboard.KeyCodes.SPACE,
+                    reset: Phaser.Input.Keyboard.KeyCodes.R,
+                    weather: Phaser.Input.Keyboard.KeyCodes.T,
+                    menu: Phaser.Input.Keyboard.KeyCodes.ESC
+                });
+
+                // Gamepad
+                this.input.gamepad.once('connected', (pad) => {
+                    this.gamepad = pad;
+                });
+            }
+
+            update(time, delta) {
+                if (!this.player) return;
+
+                // Get input
+                const input = this.getInput();
+
+                // Apply car physics
+                this.updateCarPhysics(input, delta);
+
+                // Update camera pan
+                this.updateCamera(input);
+
+                // Update HUD
+                this.updateHUD();
+
+                // Handle special keys
+                if (Phaser.Input.Keyboard.JustDown(this.keys.weather)) {
+                    this.toggleWeather();
+                }
+
+                if (Phaser.Input.Keyboard.JustDown(this.keys.reset)) {
+                    this.resetCar();
+                }
+
+                if (Phaser.Input.Keyboard.JustDown(this.keys.menu)) {
+                    this.scene.start('MenuScene');
+                }
+            }
+
+            getInput() {
+                let throttle = 0;
+                let brake = 0;
+                let steer = 0;
+                let handbrake = false;
+                let cameraPanX = 0;
+                let cameraPanY = 0;
+
+                // Keyboard input
+                if (this.keys.up.isDown) throttle = 1;
+                if (this.keys.down.isDown) brake = 1;
+                if (this.keys.left.isDown) steer = -1;
+                if (this.keys.right.isDown) steer = 1;
+                if (this.keys.handbrake.isDown) handbrake = true;
+
+                // Gamepad input (Xbox controller)
+                if (this.gamepad) {
+                    const leftStickX = this.gamepad.leftStick.x;
+                    const leftStickY = this.gamepad.leftStick.y;
+                    const rightStickX = this.gamepad.rightStick.x;
+                    const rightStickY = this.gamepad.rightStick.y;
+
+                    // Left stick for movement
+                    if (Math.abs(leftStickX) > 0.1) steer = leftStickX;
+                    if (leftStickY < -0.1) throttle = Math.abs(leftStickY);
+                    if (leftStickY > 0.1) brake = leftStickY;
+
+                    // Right trigger = throttle, Left trigger = brake (alternative)
+                    const RT = this.gamepad.buttons[7] ? this.gamepad.buttons[7].value : 0;
+                    const LT = this.gamepad.buttons[6] ? this.gamepad.buttons[6].value : 0;
+                    if (RT > 0.1) throttle = RT;
+                    if (LT > 0.1) brake = LT;
+
+                    // LB = handbrake
+                    if (this.gamepad.buttons[4] && this.gamepad.buttons[4].pressed) handbrake = true;
+
+                    // Right stick for camera pan
+                    if (Math.abs(rightStickX) > 0.2) cameraPanX = rightStickX;
+                    if (Math.abs(rightStickY) > 0.2) cameraPanY = rightStickY;
+                }
+
+                return { throttle, brake, steer, handbrake, cameraPanX, cameraPanY };
+            }
+
+            updateCarPhysics(input, delta) {
+                const dt = delta / 1000; // Convert to seconds
+
+                // Get current velocity
+                const body = this.player.body;
+                const velocity = body.velocity;
+                const currentSpeed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
+                
+                // Store display speed (in MPH for fun)
+                this.player.carSpeed = Math.round(currentSpeed * 2);
+
+                // Car facing direction
+                const carAngle = this.player.rotation;
+                const forwardX = Math.sin(carAngle);
+                const forwardY = -Math.cos(carAngle);
+
+                // Calculate grip factor (affected by rain)
+                let gripFactor = this.isRaining ? 0.6 : 1.0;
+                
+                // Reduce grip during handbrake (drift)
+                if (input.handbrake) {
+                    gripFactor *= 0.3; // Much less grip = easier drift
+                    this.player.isDrifting = currentSpeed > 50; // Only drift if moving fast enough
+                } else {
+                    this.player.isDrifting = false;
+                }
+
+                // ===== ACCELERATION =====
+                if (input.throttle > 0) {
+                    const accelForce = input.throttle * this.player.acceleration * gripFactor;
+                    this.matter.applyForce(this.player, {
+                        x: forwardX * accelForce,
+                        y: forwardY * accelForce
+                    });
+                }
+
+                // ===== BRAKING =====
+                if (input.brake > 0) {
+                    const brakeForce = input.brake * this.player.acceleration * 0.8;
+                    this.matter.applyForce(this.player, {
+                        x: -forwardX * brakeForce,
+                        y: -forwardY * brakeForce
+                    });
+                }
+
+                // ===== STEERING =====
+                if (Math.abs(input.steer) > 0.1 && currentSpeed > 10) {
+                    // Turn rate based on speed and handling
+                    const turnSpeed = (this.player.handling / 100) * input.steer;
+                    const speedFactor = Math.min(currentSpeed / 100, 1);
+                    
+                    this.player.rotation += turnSpeed * speedFactor * 0.05;
+                }
+
+                // ===== DRIFT PHYSICS (The Magic!) =====
+                // When drifting, car slides sideways
+                if (!input.handbrake) {
+                    // Normal driving: align velocity with car direction
+                    const velocityAngle = Math.atan2(velocity.y, velocity.x);
+                    const angleDiff = Phaser.Math.Angle.Wrap(carAngle + Math.PI / 2 - velocityAngle);
+                    
+                    // Apply corrective force to align car with movement (grip)
+                    const correctionForce = angleDiff * gripFactor * 0.5;
+                    const perpX = -forwardY;
+                    const perpY = forwardX;
+                    
+                    this.matter.applyForce(this.player, {
+                        x: perpX * correctionForce,
+                        y: perpY * correctionForce
+                    });
+                }
+
+                // ===== SPEED LIMITING =====
+                if (currentSpeed > this.player.maxSpeed) {
+                    const ratio = this.player.maxSpeed / currentSpeed;
+                    this.matter.setVelocity(this.player, velocity.x * ratio, velocity.y * ratio);
+                }
+
+                // ===== AIR RESISTANCE =====
+                const drag = 0.98;
+                this.matter.setVelocity(this.player, velocity.x * drag, velocity.y * drag);
+            }
+
+            updateCamera(input) {
+                // Smooth camera pan with right stick
+                this.cameraPanX += (input.cameraPanX * 200 - this.cameraPanX) * 0.1;
+                this.cameraPanY += (input.cameraPanY * 200 - this.cameraPanY) * 0.1;
+
+                this.cameras.main.setFollowOffset(this.cameraPanX, this.cameraPanY);
+            }
+
+            updateHUD() {
+                document.getElementById('speedDisplay').textContent = this.player.carSpeed || 0;
+            }
+
+            toggleWeather() {
+                this.isRaining = !this.isRaining;
+                document.getElementById('weather').textContent = this.isRaining ? 'Rain 🌧️' : 'Clear ☀️';
+                
+                // Visual feedback
+                if (this.isRaining) {
+                    this.cameras.main.setBackgroundColor(0x444455);
+                } else {
+                    this.cameras.main.setBackgroundColor(0x2d2d2d);
+                }
+            }
+
+            resetCar() {
+                this.matter.setPosition(this.player, { x: this.worldWidth / 2, y: this.worldHeight / 2 });
+                this.matter.setVelocity(this.player, 0, 0);
+                this.matter.setAngularVelocity(this.player, 0);
+                this.player.rotation = 0;
+            }
+        }
+    </script>
+</body>
+</html>
