@@ -47,18 +47,24 @@ export class MenuScene extends Phaser.Scene {
             fill: '#ffffff'
         }).setOrigin(0.5);
 
-        // Create modals
-        this.customizeCarModal = new CustomizeCarModal(this);
-        this.customizeCarModal.create();
-        
-        this.settingsModal = new AppSettingsModal(this, this.customizeCarModal);
-        this.settingsModal.create();
-
         // Settings button in top-right corner
         const settingsBtn = this.createButton(1120, 50, 120, 48, '⚙️ Settings', () => this.openSettings(), {
             fontSize: '16px'
         });
-        this.add.existing(settingsBtn);
+        settingsBtn.setDepth(100); // Ensure it's on top
+        console.log('Settings button created at', settingsBtn.x, settingsBtn.y);
+        // Button is already added to scene via this.add.container in createButton
+
+        // Create modals
+        console.log('Creating CustomizeCarModal...');
+        this.customizeCarModal = new CustomizeCarModal(this);
+        this.customizeCarModal.create();
+        console.log('CustomizeCarModal created');
+        
+        console.log('Creating AppSettingsModal...');
+        this.settingsModal = new AppSettingsModal(this, this.customizeCarModal);
+        this.settingsModal.create();
+        console.log('AppSettingsModal created');
 
         this.createMainPanel();
         this.bindKeyboard();
@@ -87,8 +93,12 @@ export class MenuScene extends Phaser.Scene {
     }
 
     openSettings() {
+        console.log('openSettings called, settingsModal:', this.settingsModal);
         if (this.settingsModal) {
+            console.log('Showing settings modal');
             this.settingsModal.show();
+        } else {
+            console.error('Settings modal not initialized!');
         }
     }
 
