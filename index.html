@@ -252,12 +252,13 @@
             createPlayer() {
                 // Create a simple car texture via Graphics
                 // IMPORTANT: Phaser angle 0 faces to the RIGHT, so make car's "front" point right.
+                // Make the car longer for a nicer silhouette and drift feel.
                 const g = this.add.graphics();
                 g.fillStyle(this.carData.color, 1);
-                g.fillRect(0, 0, 100, 60); // body (wide)
+                g.fillRect(0, 0, 140, 60); // body (longer)
                 g.fillStyle(0xffffff, 1);
-                g.fillRect(85, 24, 10, 12); // small front indicator at the right
-                g.generateTexture('carTexture', 100, 60);
+                g.fillRect(122, 24, 14, 12); // small front indicator near the right edge
+                g.generateTexture('carTexture', 140, 60);
                 g.destroy();
 
                 // Arcade physics sprite for the car
@@ -328,7 +329,7 @@
                 const steerInput = (right ? 1 : 0) - (left ? 1 : 0);
 
                 // Rotate
-                const turnRate = Phaser.Math.DEG_TO_RAD * this.carData.handling * dt * (handbrake ? 1.6 : 1);
+                const turnRate = Phaser.Math.DEG_TO_RAD * this.carData.handling * dt * (handbrake ? 1.8 : 1);
                 if (left) this.player.rotation -= turnRate;
                 if (right) this.player.rotation += turnRate;
 
@@ -367,8 +368,9 @@
                     const lateralY = forwardX;
                     // Scale slip with speed above threshold and steering amount
                     const slipFactor = Phaser.Math.Clamp((currentMph - 17) / ((this.carData.topSpeedMph || 65) - 17), 0, 1);
-                    let slipStrength = 0.35 * slipFactor; // baseline slip at speed
-                    if (handbrake) slipStrength += 0.55;  // strong extra slip when handbrake
+                    let slipStrength = 0.50 * slipFactor; // slightly stronger baseline slip at speed
+                    if (handbrake) slipStrength += 0.70;  // stronger extra slip when handbrake
+                    slipStrength = Phaser.Math.Clamp(slipStrength, 0, 0.98);
                     const steer = (steerInput === 0 && handbrake) ? 1 : steerInput; // allow slip even if not steering
                     vx += lateralX * this.playerSpeed * slipStrength * steer;
                     vy += lateralY * this.playerSpeed * slipStrength * steer;
