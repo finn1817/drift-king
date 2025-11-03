@@ -94,6 +94,7 @@
     <div id="controls">
         <h3>🎮 CONTROLS</h3>
         <p><strong>WASD / Arrows:</strong> Drive</p>
+        <p><strong>SPACE:</strong> Handbrake (drift)</p>
         <p><strong>R:</strong> Reset Car</p>
         <p><strong>T:</strong> Toggle Rain</p>
         <p><strong>ESC:</strong> Menu</p>
@@ -285,6 +286,7 @@
                     down: Phaser.Input.Keyboard.KeyCodes.S,
                     left: Phaser.Input.Keyboard.KeyCodes.A,
                     right: Phaser.Input.Keyboard.KeyCodes.D,
+                    handbrake: Phaser.Input.Keyboard.KeyCodes.SPACE,
                     reset: Phaser.Input.Keyboard.KeyCodes.R,
                     weather: Phaser.Input.Keyboard.KeyCodes.T,
                     menu: Phaser.Input.Keyboard.KeyCodes.ESC
@@ -322,10 +324,11 @@
                 const down = this.keys.down.isDown || this.cursors.down.isDown;
                 const left = this.keys.left.isDown || this.cursors.left.isDown;
                 const right = this.keys.right.isDown || this.cursors.right.isDown;
+                const handbrake = this.keys.handbrake.isDown;
                 const steerInput = (right ? 1 : 0) - (left ? 1 : 0);
 
                 // Rotate
-                const turnRate = Phaser.Math.DEG_TO_RAD * this.carData.handling * dt;
+                const turnRate = Phaser.Math.DEG_TO_RAD * this.carData.handling * dt * (handbrake ? 1.6 : 1);
                 if (left) this.player.rotation -= turnRate;
                 if (right) this.player.rotation += turnRate;
 
@@ -339,9 +342,15 @@
                 const maxRev = this.carData.topSpeed * 0.5;
                 this.playerSpeed = Phaser.Math.Clamp(this.playerSpeed, -maxRev, maxFwd);
 
-                // Natural drag
-                const drag = 0.98;
-                this.playerSpeed *= drag;
+                // Natural, dt-based drag (mild). Keeps acceleration normal and allows reaching top speed.
+                const dragPerSecond = 0.10; // 10%/s
+                this.playerSpeed -= this.playerSpeed * dragPerSecond * dt;
+
+                // Handbrake cuts forward speed harder to initiate/maintain drift
+                if (handbrake) {
+                    const hbDecel = 600; // px/s^2
+                    this.playerSpeed -= hbDecel * dt * Math.sign(this.playerSpeed);
+                }
 
                 // Apply velocity based on rotation
                 const forwardX = Math.cos(this.player.rotation);
@@ -352,15 +361,17 @@
                 // Add controlled drift-style slip when turning above ~17 mph
                 const mphScale = (this.carData.topSpeedMph || 65) / this.carData.topSpeed; // mph per px/s
                 const currentMph = Math.abs(this.playerSpeed) * mphScale;
-                if (Math.abs(steerInput) > 0 && currentMph > 17) {
+                if ((Math.abs(steerInput) > 0 && currentMph > 17) || handbrake) {
                     // Lateral direction (90° left of forward)
                     const lateralX = -forwardY;
                     const lateralY = forwardX;
                     // Scale slip with speed above threshold and steering amount
                     const slipFactor = Phaser.Math.Clamp((currentMph - 17) / ((this.carData.topSpeedMph || 65) - 17), 0, 1);
-                    const slipStrength = 0.35 * slipFactor; // not super slip
-                    vx += lateralX * this.playerSpeed * slipStrength * steerInput;
-                    vy += lateralY * this.playerSpeed * slipStrength * steerInput;
+                    let slipStrength = 0.35 * slipFactor; // baseline slip at speed
+                    if (handbrake) slipStrength += 0.55;  // strong extra slip when handbrake
+                    const steer = (steerInput === 0 && handbrake) ? 1 : steerInput; // allow slip even if not steering
+                    vx += lateralX * this.playerSpeed * slipStrength * steer;
+                    vy += lateralY * this.playerSpeed * slipStrength * steer;
                 }
 
                 this.player.setVelocity(vx, vy);
