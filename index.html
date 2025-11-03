@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DRIFT KING - Semi-Realistic Drifting Game</title>
+    <title>DRIFT KING - Minimal Drifting Demo</title>
     <style>
         * {
             margin: 0;
@@ -93,9 +93,7 @@
     <!-- Controls Guide -->
     <div id="controls">
         <h3>🎮 CONTROLS</h3>
-        <p><strong>WASD / Left Stick:</strong> Drive</p>
-        <p><strong>SPACE / LB:</strong> Handbrake (Drift)</p>
-        <p><strong>Right Stick:</strong> Pan Camera</p>
+        <p><strong>WASD / Arrows:</strong> Drive</p>
         <p><strong>R:</strong> Reset Car</p>
         <p><strong>T:</strong> Toggle Rain</p>
         <p><strong>ESC:</strong> Menu</p>
@@ -107,34 +105,19 @@
     <!-- Game Code -->
     <script>
         // ========================================
-        // CAR DATA
+        // CAR DATA (kept simple for now)
         // ========================================
-        
         const CAR_TYPES = {
             drift: {
                 name: "Drift King",
-                topSpeed: 280,
-                acceleration: 7,
-                handling: 9,
-                driftFactor: 10,
+                topSpeed: 350,      // pixels/sec
+                acceleration: 500,   // pixels/sec^2
+                handling: 180,       // deg/sec
                 color: 0xff4444
-            },
-            speed: {
-                name: "Speedster",
-                topSpeed: 350,
-                acceleration: 8,
-                handling: 6,
-                driftFactor: 5,
-                color: 0x4444ff
-            },
-            fun: {
-                name: "All-Rounder",
-                topSpeed: 300,
-                acceleration: 8,
-                handling: 8,
-                driftFactor: 7,
-                color: 0x44ff44
             }
+            // Placeholder for future cars:
+            // speed: { name: "Speedster", topSpeed: 420, acceleration: 600, handling: 140, color: 0x4444ff },
+            // fun:   { name: "All-Rounder", topSpeed: 380, acceleration: 520, handling: 160, color: 0x44ff44 }
         };
 
         // ========================================
@@ -161,42 +144,29 @@
                     fill: '#fff'
                 }).setOrigin(0.5);
 
-                // Track Selection
+                // Track Selection (only one for now)
                 this.add.text(640, 300, 'SELECT TRACK:', {
                     fontSize: '32px',
                     fill: '#ffd700'
                 }).setOrigin(0.5);
 
-                const tracks = [
-                    { name: 'The Lot (Parking Lot)', key: 'lot', y: 360 },
-                    { name: 'The Circle (Short Track)', key: 'circle', y: 410 },
-                    { name: 'Daytona 500 (NASCAR Oval)', key: 'daytona', y: 460 },
-                    { name: 'Touge Pass (Drift Track)', key: 'touge', y: 510 }
-                ];
+                const lotBtn = this.add.text(640, 380, 'The Lot (Parking Lot)', {
+                    fontSize: '24px',
+                    fill: '#fff',
+                    backgroundColor: '#44aa44',
+                    padding: { x: 20, y: 10 }
+                }).setOrigin(0.5).setInteractive();
 
-                tracks.forEach((track, index) => {
-                    const btn = this.add.text(640, track.y, track.name, {
-                        fontSize: '24px',
-                        fill: '#fff',
-                        backgroundColor: index === 0 ? '#44aa44' : '#666',
-                        padding: { x: 20, y: 10 }
-                    }).setOrigin(0.5).setInteractive();
-
-                    if (index === 0) {
-                        // Only parking lot is available in demo
-                        btn.on('pointerdown', () => {
-                            this.scene.start('GameScene', { track: track.key, car: 'drift' });
-                        });
-                        btn.on('pointerover', () => btn.setStyle({ fill: '#ffd700' }));
-                        btn.on('pointerout', () => btn.setStyle({ fill: '#fff' }));
-                    } else {
-                        btn.setAlpha(0.5);
-                        this.add.text(880, track.y, '(Coming Soon)', {
-                            fontSize: '18px',
-                            fill: '#999'
-                        }).setOrigin(0.5);
-                    }
+                lotBtn.on('pointerdown', () => {
+                    this.scene.start('GameScene', { track: 'lot', car: 'drift' });
                 });
+                lotBtn.on('pointerover', () => lotBtn.setStyle({ fill: '#ffd700' }));
+                lotBtn.on('pointerout', () => lotBtn.setStyle({ fill: '#fff' }));
+
+                // Placeholders for future tracks (to be re-added later):
+                // this.add.text(640, 430, 'The Circle (Short Track) - Coming Soon', { fontSize: '18px', fill: '#999' }).setOrigin(0.5);
+                // this.add.text(640, 470, 'Daytona 500 (NASCAR Oval) - Coming Soon', { fontSize: '18px', fill: '#999' }).setOrigin(0.5);
+                // this.add.text(640, 510, 'Touge Pass (Drift Track) - Coming Soon', { fontSize: '18px', fill: '#999' }).setOrigin(0.5);
 
                 // Instructions
                 this.add.text(640, 600, 'Click a track to start!', {
@@ -219,6 +189,7 @@
                 this.selectedTrack = data.track || 'lot';
                 this.selectedCar = data.car || 'drift';
                 this.isRaining = false;
+                this.playerSpeed = 0; // pixels/sec
             }
 
             create() {
@@ -248,24 +219,23 @@
             }
 
             createWorld() {
-                // Create a large parking lot (3000x3000 for now)
+                // Create a large parking lot (3000x3000)
                 this.worldWidth = 3000;
                 this.worldHeight = 3000;
 
-                // Ground
-                const ground = this.add.rectangle(
+                // Visual ground
+                this.add.rectangle(
                     this.worldWidth / 2,
                     this.worldHeight / 2,
                     this.worldWidth,
                     this.worldHeight,
                     0x444444
-                );
+                ).setDepth(-10);
 
                 // Parking lines (visual only)
                 const graphics = this.add.graphics();
-                graphics.lineStyle(3, 0xffff00, 0.5);
+                graphics.lineStyle(2, 0xffff00, 0.35);
 
-                // Draw parking grid
                 for (let x = 200; x < this.worldWidth; x += 150) {
                     graphics.lineBetween(x, 100, x, this.worldHeight - 100);
                 }
@@ -273,95 +243,37 @@
                     graphics.lineBetween(100, y, this.worldWidth - 100, y);
                 }
 
-                // Walls (collision boundaries)
-                this.createWalls();
-
-                // Add some obstacles (buildings/cones)
-                this.createObstacles();
-            }
-
-            createWalls() {
-                const wallThickness = 50;
-                const walls = [
-                    // Top wall
-                    { x: this.worldWidth / 2, y: 25, w: this.worldWidth, h: wallThickness },
-                    // Bottom wall
-                    { x: this.worldWidth / 2, y: this.worldHeight - 25, w: this.worldWidth, h: wallThickness },
-                    // Left wall
-                    { x: 25, y: this.worldHeight / 2, w: wallThickness, h: this.worldHeight },
-                    // Right wall
-                    { x: this.worldWidth - 25, y: this.worldHeight / 2, w: wallThickness, h: this.worldHeight }
-                ];
-
-                walls.forEach(wall => {
-                    const wallRect = this.add.rectangle(wall.x, wall.y, wall.w, wall.h, 0x8b4513);
-                    this.matter.add.gameObject(wallRect, { isStatic: true, friction: 0.1 });
-                });
-            }
-
-            createObstacles() {
-                // Random buildings/barriers scattered around
-                const obstacleCount = 15;
-                for (let i = 0; i < obstacleCount; i++) {
-                    const x = Phaser.Math.Between(300, this.worldWidth - 300);
-                    const y = Phaser.Math.Between(300, this.worldHeight - 300);
-                    const width = Phaser.Math.Between(80, 150);
-                    const height = Phaser.Math.Between(80, 150);
-
-                    const building = this.add.rectangle(x, y, width, height, 0x666666);
-                    this.matter.add.gameObject(building, { isStatic: true, friction: 0.1 });
-
-                    // Add roof detail
-                    this.add.rectangle(x, y, width - 10, height - 10, 0x555555);
-                }
-
-                // Traffic cones
-                for (let i = 0; i < 20; i++) {
-                    const x = Phaser.Math.Between(200, this.worldWidth - 200);
-                    const y = Phaser.Math.Between(200, this.worldHeight - 200);
-                    const cone = this.add.circle(x, y, 15, 0xff8800);
-                    this.matter.add.gameObject(cone, { friction: 0.8, restitution: 0.3 });
-                }
+                // Arcade physics world bounds
+                this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight, true, true, true, true);
             }
 
             createPlayer() {
-                // Create a container for the car
-                this.player = this.add.container(this.worldWidth / 2, this.worldHeight / 2);
+                // Create a simple car texture via Graphics
+                const g = this.add.graphics();
+                g.fillStyle(this.carData.color, 1);
+                g.fillRect(0, 0, 60, 100);
+                g.fillStyle(0xffffff, 1);
+                g.fillRect(20, 5, 20, 12); // front indicator
+                g.generateTexture('carTexture', 60, 100);
+                g.destroy();
 
-                // Car body (main rectangle)
-                const carBody = this.add.rectangle(0, 0, 60, 100, this.carData.color);
-                
-                // Front indicator (white rectangle at front)
-                const frontIndicator = this.add.rectangle(0, -40, 20, 15, 0xffffff);
-                
-                // Add both to container
-                this.player.add([carBody, frontIndicator]);
+                // Arcade physics sprite for the car
+                this.player = this.physics.add.image(this.worldWidth / 2, this.worldHeight / 2, 'carTexture');
+                this.player.setOrigin(0.5, 0.5);
+                this.player.setCollideWorldBounds(true);
+                this.player.setDamping(true);
+                this.player.setDrag(0.02); // linear damping factor (with useDamping)
+                this.player.setMaxVelocity(this.carData.topSpeed);
+                this.player.rotation = -Math.PI / 2; // face up initially
 
-                // Add physics to the container
-                this.matter.add.gameObject(this.player, {
-                    friction: 0.05,
-                    frictionAir: 0.02,
-                    mass: 100,
-                    restitution: 0.1
-                });
-
-                // Car properties
+                // Simple speed tracker for HUD (pixels/sec)
                 this.player.carSpeed = 0;
-                this.player.maxSpeed = this.carData.topSpeed;
-                this.player.acceleration = this.carData.acceleration;
-                this.player.handling = this.carData.handling;
-                this.player.driftFactor = this.carData.driftFactor;
-                this.player.isDrifting = false;
             }
 
             setupCamera() {
                 this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
                 this.cameras.main.setZoom(0.8);
                 this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
-
-                // Camera pan offset (for right stick)
-                this.cameraPanX = 0;
-                this.cameraPanY = 0;
             }
 
             setupControls() {
@@ -371,180 +283,70 @@
                     down: Phaser.Input.Keyboard.KeyCodes.S,
                     left: Phaser.Input.Keyboard.KeyCodes.A,
                     right: Phaser.Input.Keyboard.KeyCodes.D,
-                    handbrake: Phaser.Input.Keyboard.KeyCodes.SPACE,
                     reset: Phaser.Input.Keyboard.KeyCodes.R,
                     weather: Phaser.Input.Keyboard.KeyCodes.T,
                     menu: Phaser.Input.Keyboard.KeyCodes.ESC
                 });
 
-                // Gamepad
-                this.input.gamepad.once('connected', (pad) => {
-                    this.gamepad = pad;
-                });
+                // Also allow arrow keys
+                this.cursors = this.input.keyboard.createCursorKeys();
             }
 
             update(time, delta) {
                 if (!this.player) return;
 
-                // Get input
-                const input = this.getInput();
-
-                // Apply car physics
-                this.updateCarPhysics(input, delta);
-
-                // Update camera pan
-                this.updateCamera(input);
+                // Handle input and movement
+                this.updateCar(delta);
 
                 // Update HUD
                 this.updateHUD();
 
-                // Handle special keys
+                // Special keys
                 if (Phaser.Input.Keyboard.JustDown(this.keys.weather)) {
                     this.toggleWeather();
                 }
-
                 if (Phaser.Input.Keyboard.JustDown(this.keys.reset)) {
                     this.resetCar();
                 }
-
                 if (Phaser.Input.Keyboard.JustDown(this.keys.menu)) {
                     this.scene.start('MenuScene');
                 }
             }
+            updateCar(delta) {
+                const dt = delta / 1000;
 
-            getInput() {
-                let throttle = 0;
-                let brake = 0;
-                let steer = 0;
-                let handbrake = false;
-                let cameraPanX = 0;
-                let cameraPanY = 0;
+                // Read inputs (WASD or arrows)
+                const up = this.keys.up.isDown || this.cursors.up.isDown;
+                const down = this.keys.down.isDown || this.cursors.down.isDown;
+                const left = this.keys.left.isDown || this.cursors.left.isDown;
+                const right = this.keys.right.isDown || this.cursors.right.isDown;
 
-                // Keyboard input
-                if (this.keys.up.isDown) throttle = 1;
-                if (this.keys.down.isDown) brake = 1;
-                if (this.keys.left.isDown) steer = -1;
-                if (this.keys.right.isDown) steer = 1;
-                if (this.keys.handbrake.isDown) handbrake = true;
+                // Rotate
+                const turnRate = Phaser.Math.DEG_TO_RAD * this.carData.handling * dt;
+                if (left) this.player.rotation -= turnRate;
+                if (right) this.player.rotation += turnRate;
 
-                // Gamepad input (Xbox controller)
-                if (this.gamepad) {
-                    const leftStickX = this.gamepad.leftStick.x;
-                    const leftStickY = this.gamepad.leftStick.y;
-                    const rightStickX = this.gamepad.rightStick.x;
-                    const rightStickY = this.gamepad.rightStick.y;
+                // Throttle/Brake
+                const accel = this.carData.acceleration;
+                if (up) this.playerSpeed += accel * dt;
+                if (down) this.playerSpeed -= accel * dt;
 
-                    // Left stick for movement
-                    if (Math.abs(leftStickX) > 0.1) steer = leftStickX;
-                    if (leftStickY < -0.1) throttle = Math.abs(leftStickY);
-                    if (leftStickY > 0.1) brake = leftStickY;
+                // Clamp speeds
+                const maxFwd = this.carData.topSpeed;
+                const maxRev = this.carData.topSpeed * 0.5;
+                this.playerSpeed = Phaser.Math.Clamp(this.playerSpeed, -maxRev, maxFwd);
 
-                    // Right trigger = throttle, Left trigger = brake (alternative)
-                    const RT = this.gamepad.buttons[7] ? this.gamepad.buttons[7].value : 0;
-                    const LT = this.gamepad.buttons[6] ? this.gamepad.buttons[6].value : 0;
-                    if (RT > 0.1) throttle = RT;
-                    if (LT > 0.1) brake = LT;
-
-                    // LB = handbrake
-                    if (this.gamepad.buttons[4] && this.gamepad.buttons[4].pressed) handbrake = true;
-
-                    // Right stick for camera pan
-                    if (Math.abs(rightStickX) > 0.2) cameraPanX = rightStickX;
-                    if (Math.abs(rightStickY) > 0.2) cameraPanY = rightStickY;
-                }
-
-                return { throttle, brake, steer, handbrake, cameraPanX, cameraPanY };
-            }
-
-            updateCarPhysics(input, delta) {
-                const dt = delta / 1000; // Convert to seconds
-
-                // Get current velocity
-                const body = this.player.body;
-                const velocity = body.velocity;
-                const currentSpeed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
-                
-                // Store display speed (in MPH for fun)
-                this.player.carSpeed = Math.round(currentSpeed * 2);
-
-                // Car facing direction
-                const carAngle = this.player.rotation;
-                const forwardX = Math.sin(carAngle);
-                const forwardY = -Math.cos(carAngle);
-
-                // Calculate grip factor (affected by rain)
-                let gripFactor = this.isRaining ? 0.6 : 1.0;
-                
-                // Reduce grip during handbrake (drift)
-                if (input.handbrake) {
-                    gripFactor *= 0.3; // Much less grip = easier drift
-                    this.player.isDrifting = currentSpeed > 50; // Only drift if moving fast enough
-                } else {
-                    this.player.isDrifting = false;
-                }
-
-                // ===== ACCELERATION =====
-                if (input.throttle > 0) {
-                    const accelForce = input.throttle * this.player.acceleration * gripFactor;
-                    this.matter.applyForce(this.player, {
-                        x: forwardX * accelForce,
-                        y: forwardY * accelForce
-                    });
-                }
-
-                // ===== BRAKING =====
-                if (input.brake > 0) {
-                    const brakeForce = input.brake * this.player.acceleration * 0.8;
-                    this.matter.applyForce(this.player, {
-                        x: -forwardX * brakeForce,
-                        y: -forwardY * brakeForce
-                    });
-                }
-
-                // ===== STEERING =====
-                if (Math.abs(input.steer) > 0.1 && currentSpeed > 10) {
-                    // Turn rate based on speed and handling
-                    const turnSpeed = (this.player.handling / 100) * input.steer;
-                    const speedFactor = Math.min(currentSpeed / 100, 1);
-                    
-                    this.player.rotation += turnSpeed * speedFactor * 0.05;
-                }
-
-                // ===== DRIFT PHYSICS (The Magic!) =====
-                // When drifting, car slides sideways
-                if (!input.handbrake) {
-                    // Normal driving: align velocity with car direction
-                    const velocityAngle = Math.atan2(velocity.y, velocity.x);
-                    const angleDiff = Phaser.Math.Angle.Wrap(carAngle + Math.PI / 2 - velocityAngle);
-                    
-                    // Apply corrective force to align car with movement (grip)
-                    const correctionForce = angleDiff * gripFactor * 0.5;
-                    const perpX = -forwardY;
-                    const perpY = forwardX;
-                    
-                    this.matter.applyForce(this.player, {
-                        x: perpX * correctionForce,
-                        y: perpY * correctionForce
-                    });
-                }
-
-                // ===== SPEED LIMITING =====
-                if (currentSpeed > this.player.maxSpeed) {
-                    const ratio = this.player.maxSpeed / currentSpeed;
-                    this.matter.setVelocity(this.player, velocity.x * ratio, velocity.y * ratio);
-                }
-
-                // ===== AIR RESISTANCE =====
+                // Natural drag
                 const drag = 0.98;
-                this.matter.setVelocity(this.player, velocity.x * drag, velocity.y * drag);
-            }
+                this.playerSpeed *= drag;
 
-            updateCamera(input) {
-                // Smooth camera pan with right stick
-                this.cameraPanX += (input.cameraPanX * 200 - this.cameraPanX) * 0.1;
-                this.cameraPanY += (input.cameraPanY * 200 - this.cameraPanY) * 0.1;
+                // Apply velocity based on rotation
+                const vx = Math.cos(this.player.rotation) * this.playerSpeed;
+                const vy = Math.sin(this.player.rotation) * this.playerSpeed;
+                this.player.setVelocity(vx, vy);
 
-                this.cameras.main.setFollowOffset(this.cameraPanX, this.cameraPanY);
+                // Update HUD speed (rough MPH approximation)
+                this.player.carSpeed = Math.max(0, Math.round(Math.abs(this.playerSpeed) * 0.06));
             }
 
             updateHUD() {
@@ -554,20 +356,14 @@
             toggleWeather() {
                 this.isRaining = !this.isRaining;
                 document.getElementById('weather').textContent = this.isRaining ? 'Rain 🌧️' : 'Clear ☀️';
-                
-                // Visual feedback
-                if (this.isRaining) {
-                    this.cameras.main.setBackgroundColor(0x444455);
-                } else {
-                    this.cameras.main.setBackgroundColor(0x2d2d2d);
-                }
+                this.cameras.main.setBackgroundColor(this.isRaining ? 0x444455 : 0x2d2d2d);
             }
 
             resetCar() {
-                this.matter.setPosition(this.player, { x: this.worldWidth / 2, y: this.worldHeight / 2 });
-                this.matter.setVelocity(this.player, 0, 0);
-                this.matter.setAngularVelocity(this.player, 0);
-                this.player.rotation = 0;
+                this.playerSpeed = 0;
+                this.player.setPosition(this.worldWidth / 2, this.worldHeight / 2);
+                this.player.setVelocity(0, 0);
+                this.player.rotation = -Math.PI / 2;
             }
         }
 
@@ -582,17 +378,13 @@
             parent: 'gameContainer',
             backgroundColor: '#2d2d2d',
             physics: {
-                default: 'matter',
-                matter: {
-                    gravity: { x: 0, y: 0 },
-                    debug: false, // Set to true to see collision boxes
-                    enableSleeping: false
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false
                 }
             },
-            scene: [MenuScene, GameScene],
-            input: {
-                gamepad: true
-            }
+            scene: [MenuScene, GameScene]
         };
 
         const game = new Phaser.Game(config);
