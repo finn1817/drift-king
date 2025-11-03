@@ -110,7 +110,8 @@
         const CAR_TYPES = {
             drift: {
                 name: "Drift King",
-                topSpeed: 350,      // pixels/sec
+                topSpeed: 1080,     // pixels/sec (maps ~ to 65 mph)
+                topSpeedMph: 65,    // display speed cap in MPH
                 acceleration: 500,   // pixels/sec^2
                 handling: 180,       // deg/sec
                 color: 0xff4444
@@ -219,9 +220,9 @@
             }
 
             createWorld() {
-                // Create a large parking lot (3000x3000)
-                this.worldWidth = 3000;
-                this.worldHeight = 3000;
+                // Create a large parking lot (bigger for higher top speed)
+                this.worldWidth = 5000;
+                this.worldHeight = 5000;
 
                 // Visual ground
                 this.add.rectangle(
@@ -321,6 +322,7 @@
                 const down = this.keys.down.isDown || this.cursors.down.isDown;
                 const left = this.keys.left.isDown || this.cursors.left.isDown;
                 const right = this.keys.right.isDown || this.cursors.right.isDown;
+                const steerInput = (right ? 1 : 0) - (left ? 1 : 0);
 
                 // Rotate
                 const turnRate = Phaser.Math.DEG_TO_RAD * this.carData.handling * dt;
@@ -342,12 +344,29 @@
                 this.playerSpeed *= drag;
 
                 // Apply velocity based on rotation
-                const vx = Math.cos(this.player.rotation) * this.playerSpeed;
-                const vy = Math.sin(this.player.rotation) * this.playerSpeed;
+                const forwardX = Math.cos(this.player.rotation);
+                const forwardY = Math.sin(this.player.rotation);
+                let vx = forwardX * this.playerSpeed;
+                let vy = forwardY * this.playerSpeed;
+
+                // Add controlled drift-style slip when turning above ~17 mph
+                const mphScale = (this.carData.topSpeedMph || 65) / this.carData.topSpeed; // mph per px/s
+                const currentMph = Math.abs(this.playerSpeed) * mphScale;
+                if (Math.abs(steerInput) > 0 && currentMph > 17) {
+                    // Lateral direction (90° left of forward)
+                    const lateralX = -forwardY;
+                    const lateralY = forwardX;
+                    // Scale slip with speed above threshold and steering amount
+                    const slipFactor = Phaser.Math.Clamp((currentMph - 17) / ((this.carData.topSpeedMph || 65) - 17), 0, 1);
+                    const slipStrength = 0.35 * slipFactor; // not super slip
+                    vx += lateralX * this.playerSpeed * slipStrength * steerInput;
+                    vy += lateralY * this.playerSpeed * slipStrength * steerInput;
+                }
+
                 this.player.setVelocity(vx, vy);
 
                 // Update HUD speed (rough MPH approximation)
-                this.player.carSpeed = Math.max(0, Math.round(Math.abs(this.playerSpeed) * 0.06));
+                this.player.carSpeed = Math.max(0, Math.round(Math.abs(this.playerSpeed) * mphScale));
             }
 
             updateHUD() {
