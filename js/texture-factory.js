@@ -7,6 +7,7 @@ const CAR_HEIGHT = 72;
 export const ensureGameTextures = (scene) => {
     ensureCarTextures(scene);
     ensureWallTexture(scene);
+    ensureDirectionArrowTexture(scene);
 };
 
 const ensureCarTextures = (scene) => {
@@ -87,5 +88,34 @@ const ensureWallTexture = (scene) => {
     g.fillStyle(0xffffff, 1);
     g.fillRect(0, 0, 120, 36);
     g.generateTexture('wallTexture', 120, 36);
+    g.destroy();
+};
+
+const ensureDirectionArrowTexture = (scene) => {
+    if (scene.textures.exists('dirArrow')) return;
+    const g = scene.make.graphics({ x: 0, y: 0, add: false });
+    // Draw a simple HUD arrow pointing up by default
+    const w = 48, h = 54;
+    g.clear();
+    g.fillStyle(0x00d4ff, 0.95);
+    g.beginPath();
+    g.moveTo(w / 2, 2);         // tip (top)
+    g.lineTo(w - 6, h - 8);     // right base
+    g.lineTo(w / 2, h - 18);    // inner bottom
+    g.lineTo(6, h - 8);         // left base
+    g.closePath();
+    g.fillPath();
+
+    g.lineStyle(3, 0xffffff, 0.9);
+    g.strokePath();
+
+    // center line
+    g.lineStyle(3, 0xffffff, 0.85);
+    g.beginPath();
+    g.moveTo(w / 2, h - 16);
+    g.lineTo(w / 2, 8);
+    g.strokePath();
+
+    g.generateTexture('dirArrow', w, h);
     g.destroy();
 };

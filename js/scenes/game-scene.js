@@ -252,6 +252,13 @@ export class GameScene extends Phaser.Scene {
             strokeThickness: 6
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1000).setVisible(false);
 
+        // Direction arrow (HUD) to show where to drive in race tracks
+        this.directionArrow = this.add.image(640, 90, 'dirArrow')
+            .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(1000)
+            .setVisible(this.isRaceTrack);
+
         if (this.isRaceTrack) {
             this.hud.healthContainer.classList.remove('hidden');
             this.hud.lapContainer.classList.remove('hidden');
@@ -281,6 +288,10 @@ export class GameScene extends Phaser.Scene {
                     this.countdownText.setText('GO!');
                     this.raceState = 'running';
                     this.disableInput = false;
+                    // Grace period: player cannot take damage for the first 5 seconds
+                    if (this.playerCar) {
+                        this.playerCar.invulnerableUntil = this.time.now + 5000;
+                    }
                     this.time.delayedCall(700, () => this.countdownText.setVisible(false));
                 }
             }
@@ -538,6 +549,11 @@ export class GameScene extends Phaser.Scene {
     applyDamage(car, amount, source = '') {
         if (!car || car.retired || !this.isRaceTrack) return;
 
+        // Skip damage during player grace period at race start
+        if (car.invulnerableUntil && this.time.now < car.invulnerableUntil) {
+            return;
+        }
+
         car.health = Math.max(0, car.health - amount);
         car.localVelocity.x *= 0.78;
         car.localVelocity.y *= 0.55;
@@ -700,6 +716,21 @@ export class GameScene extends Phaser.Scene {
         }
 
         this.updateHUD();
+
+        // Update driving direction arrow (points from player's heading to next waypoint)
+        if (this.isRaceTrack && this.directionArrow && this.playerCar && !this.playerCar.finished) {
+            const raceCfg = this.trackConfig.race;
+            const wp = raceCfg.waypoints[this.playerCar.nextWaypoint];
+            if (wp) {
+                const sprite = this.playerCar.sprite;
+                const targetAngle = Phaser.Math.Angle.Between(sprite.x, sprite.y, wp.x, wp.y);
+                const angleDiff = Phaser.Math.Angle.Wrap(targetAngle - sprite.rotation);
+                this.directionArrow.setVisible(true);
+                this.directionArrow.rotation = angleDiff; // Up (0) means aligned
+            }
+        } else if (this.directionArrow) {
+            this.directionArrow.setVisible(false);
+        }
     }
 
     updateHUD(force = false) {
