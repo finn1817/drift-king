@@ -9,7 +9,8 @@ const DEFAULT_SETTINGS = Object.freeze({
     carId: defaultCarId,
     schemeId: defaultSchemeId,
     aiCount: 1,
-    aiDifficulty: 'medium'
+    aiDifficulty: 'medium',
+    customPhysics: {}
 });
 
 let currentSettings = { ...DEFAULT_SETTINGS };

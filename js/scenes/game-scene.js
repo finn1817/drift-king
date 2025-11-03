@@ -18,6 +18,7 @@ export class GameScene extends Phaser.Scene {
         this.schemeId = data.schemeId || CAR_TYPES[this.carId].schemes[0].id;
         this.trackConfig = TRACKS[this.trackId] || TRACKS.lot;
         this.carData = CAR_TYPES[this.carId] || CAR_TYPES.drift;
+        this.customPhysics = data.customPhysics || {};
         this.aiDifficulty = data.aiDifficulty || 'medium';
         this.aiProfile = AI_PROFILES[this.aiDifficulty] || AI_PROFILES.medium;
         this.desiredAICount = this.trackConfig.type === 'race'
@@ -204,7 +205,8 @@ export class GameScene extends Phaser.Scene {
             y: playerSpawn.y,
             angle: playerSpawn.angle,
             isAI: false,
-            isRaceTrack: this.isRaceTrack
+            isRaceTrack: this.isRaceTrack,
+            customPhysics: this.customPhysics
         });
 
         this.cars.push(this.playerCar);
@@ -369,11 +371,24 @@ export class GameScene extends Phaser.Scene {
                     this.raceState = 'running';
                     this.disableInput = false;
                     if (this.playerCar) {
-                        this.playerCar.invulnerableUntil = this.time.now + 5000;
+                        // Extended invulnerability: 12 seconds of no damage
+                        this.playerCar.invulnerableUntil = this.time.now + 12000;
                     }
-                    // Ghosting: disable car-vs-car collisions briefly to avoid turn 1 pileups
+                    // Extended ghosting: disable car-vs-car collisions for 8 seconds to avoid turn 1 pileups
                     this.setCarVsCarCollidersActive(false);
-                    this.time.delayedCall(3000, () => this.setCarVsCarCollidersActive(true));
+                    this.time.delayedCall(8000, () => this.setCarVsCarCollidersActive(true));
+                    
+                    // AI starts slower and accelerates gradually
+                    this.aiCars.forEach(ai => {
+                        ai.aiStartThrottle = 0.2;
+                        ai.aiStartTime = this.time.now;
+                    });
+                    
+                    // Show protection message
+                    this.time.delayedCall(800, () => {
+                        this.showRaceMessage('Protected: 12s invulnerable, 8s ghost mode!', 3500);
+                    });
+                    
                     this.time.delayedCall(700, () => this.countdownText.setVisible(false));
                 }
             }
@@ -437,6 +452,16 @@ export class GameScene extends Phaser.Scene {
     const speedMph = car.carSpeedMph || 0;
     const targetTop = Math.min(car.data.topSpeedMph + (meta.targetSpeedBoost || 0), 88);
     let throttle = 1;
+    
+    // Progressive AI start: begin very slow and ramp up over 10 seconds
+    if (car.aiStartTime) {
+        const timeSinceStart = this.time.now - car.aiStartTime;
+        if (timeSinceStart < 10000) {
+            const startProgress = timeSinceStart / 10000;
+            const startThrottle = Phaser.Math.Linear(0.2, 1.0, startProgress);
+            throttle = Math.min(throttle, startThrottle);
+        }
+    }
 
         const angleSeverity = Math.abs(angleDiff);
         if (angleSeverity > 0.6) throttle = 0.75;
@@ -461,13 +486,13 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Proximity awareness: if another car is close in front, lift and bias steer slightly away
-        const lead = this.findLeadCarAhead(car, 240, Math.PI / 3);
+        const lead = this.findLeadCarAhead(car, 350, Math.PI / 2.5);
         if (lead) {
-            throttle = Math.min(throttle, 0.6);
+            throttle = Math.min(throttle, 0.45);
             const relAngle = Phaser.Math.Angle.Between(sprite.x, sprite.y, lead.sprite.x, lead.sprite.y) - sprite.rotation;
-            const away = Phaser.Math.Angle.Wrap(relAngle) > 0 ? -0.25 : 0.25;
-            meta.steer = Phaser.Math.Clamp(Phaser.Math.Linear(meta.steer, meta.steer + away * 0.35, 0.25), -1, 1);
-            if (speedMph > targetTop - 2) brake = Math.max(brake, 0.2);
+            const away = Phaser.Math.Angle.Wrap(relAngle) > 0 ? -0.35 : 0.35;
+            meta.steer = Phaser.Math.Clamp(Phaser.Math.Linear(meta.steer, meta.steer + away * 0.5, 0.3), -1, 1);
+            if (speedMph > targetTop - 5) brake = Math.max(brake, 0.4);
         }
 
         const jitter = randRange(-profile.jitter, profile.jitter);
@@ -495,7 +520,7 @@ export class GameScene extends Phaser.Scene {
         };
     }
 
-    findLeadCarAhead(car, distance = 220, halfFov = Math.PI / 3) {
+    findLeadCarAhead(car, distance = 350, halfFov = Math.PI / 2.5) {
         const sprite = car.sprite;
         let best = null;
         let bestDist = Infinity;

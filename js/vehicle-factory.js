@@ -9,11 +9,31 @@ export const spawnCar = (scene, {
     angle = 0,
     isAI = false,
     name = null,
-    isRaceTrack = false
+    isRaceTrack = false,
+    customPhysics = {}
 } = {}) => {
     const carData = CAR_TYPES[carId] || CAR_TYPES.drift;
     const scheme = getCarScheme(carData.id, schemeId) || carData.schemes[0];
     const textureKey = `car_${carData.id}_${scheme.id}`;
+
+    // Apply custom physics multipliers to car data
+    const modifiedCarData = { ...carData };
+    if (customPhysics.engineForce) {
+        modifiedCarData.engineForce = carData.engineForce * customPhysics.engineForce;
+    }
+    if (customPhysics.brakeForce) {
+        modifiedCarData.brakeForce = carData.brakeForce * customPhysics.brakeForce;
+    }
+    if (customPhysics.maxSteerAngle) {
+        modifiedCarData.maxSteerAngle = carData.maxSteerAngle * customPhysics.maxSteerAngle;
+    }
+    if (customPhysics.cornerStiffness) {
+        modifiedCarData.cornerStiffnessFront = carData.cornerStiffnessFront * customPhysics.cornerStiffness;
+        modifiedCarData.cornerStiffnessRear = carData.cornerStiffnessRear * customPhysics.cornerStiffness;
+    }
+    if (customPhysics.mass) {
+        modifiedCarData.mass = carData.mass * customPhysics.mass;
+    }
 
     const sprite = scene.physics.add.image(x, y, textureKey);
     sprite.setOrigin(0.5);
@@ -30,7 +50,7 @@ export const spawnCar = (scene, {
         id: carId,
         schemeId: scheme.id,
         scheme,
-        data: carData,
+        data: modifiedCarData,
         sprite,
         isAI,
         name: name || `${carData.name}`,
@@ -40,9 +60,9 @@ export const spawnCar = (scene, {
         lastDriftDir: 1,
         speed: 0,
         carSpeedMph: 0,
-        health: carData.health || 320,
-        maxHealth: carData.health || 320,
-        durability: carData.durability || 1,
+        health: modifiedCarData.health || 320,
+        maxHealth: modifiedCarData.health || 320,
+        durability: modifiedCarData.durability || 1,
         lap: isRaceTrack ? 1 : 0,
         prevWaypoint: null,
         nextWaypoint: 0,

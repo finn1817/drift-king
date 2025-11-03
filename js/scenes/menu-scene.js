@@ -1,8 +1,10 @@
 // js/scenes/menu-scene.js
-import { listCarOptions, getCarScheme, getCarDisplayName, getDefaultSchemeId } from '../car-presets.js';
+import { getCarDisplayName, getDefaultSchemeId } from '../car-presets.js';
 import { TRACKS } from '../track-config.js';
 import { ensureGameTextures } from '../texture-factory.js';
 import { getSessionSettings, setSessionSettings } from '../session-state.js';
+import { AppSettingsModal } from '../app-settings.js';
+import { CustomizeCarModal } from './customize-car-modal.js';
 
 const DIFFICULTY_LABELS = {
     easy: 'Easy',
@@ -15,16 +17,14 @@ export class MenuScene extends Phaser.Scene {
         super({ key: 'MenuScene' });
         this.trackCards = [];
         this.difficultyButtons = [];
-        this.carModalCards = [];
-        this.carModalSchemeButtons = new Map();
+        this.settingsModal = null;
+        this.customizeCarModal = null;
     }
 
     init() {
         this.settings = getSessionSettings();
         this.trackCards = [];
         this.difficultyButtons = [];
-        this.carModalCards = [];
-        this.carModalSchemeButtons = new Map();
     }
 
     create() {
@@ -47,20 +47,49 @@ export class MenuScene extends Phaser.Scene {
             fill: '#ffffff'
         }).setOrigin(0.5);
 
-        this.createSettingsPanel();
-        this.createCarModal();
+        // Create modals
+        this.customizeCarModal = new CustomizeCarModal(this);
+        this.customizeCarModal.create();
+        
+        this.settingsModal = new AppSettingsModal(this, this.customizeCarModal);
+        this.settingsModal.create();
+
+        // Settings button in top-right corner
+        const settingsBtn = this.createButton(1120, 50, 120, 48, '⚙️ Settings', () => this.openSettings(), {
+            fontSize: '16px'
+        });
+        this.add.existing(settingsBtn);
+
+        this.createMainPanel();
         this.bindKeyboard();
 
         this.resetHudDefaults();
         this.refreshSummaries();
+
+        // Listen for updates from modals
+        this.events.on('settings-updated', () => {
+            this.refreshSummaries();
+            this.updateAIControlsState();
+        });
+        this.events.on('customization-updated', () => {
+            this.refreshSummaries();
+        });
     }
 
     bindKeyboard() {
         this.input.keyboard.on('keydown-ESC', () => {
-            if (this.carModal?.visible) {
-                this.hideCarModal();
+            if (this.customizeCarModal?.isVisible()) {
+                this.customizeCarModal.hide();
+            } else if (this.settingsModal?.isVisible()) {
+                this.settingsModal.hide();
             }
         });
+    }
+
+    openSettings() {
+        if (this.settingsModal) {
+            this.settingsModal.show();
+        }
     }
 
     resetHudDefaults() {
@@ -73,21 +102,21 @@ export class MenuScene extends Phaser.Scene {
         document.getElementById('positionContainer').classList.add('hidden');
     }
 
-    createSettingsPanel() {
+    createMainPanel() {
         const panel = this.add.container(640, 390);
         const panelWidth = 960;
-        const panelHeight = 460;
+        const panelHeight = 380;
 
         const backdrop = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x06162c, 0.85)
             .setStrokeStyle(3, 0x1a7be1, 0.6);
         panel.add(backdrop);
 
-        // Car section
-        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 30, 'CAR SELECTION', {
+        // Current Car Display (read-only)
+        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 30, 'SELECTED CAR', {
             fontFamily: 'Arial Black',
             fontSize: '24px',
             fill: '#ffd700'
-        }).setOrigin(0, 0.5).setDepth(10).setScrollFactor(0).setInteractive();
+        }).setOrigin(0, 0.5).setDepth(10).setScrollFactor(0);
 
         this.carSummaryText = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 72, '', {
             fontFamily: 'Arial',
@@ -97,11 +126,16 @@ export class MenuScene extends Phaser.Scene {
 
         panel.add(this.carSummaryText);
 
-        const carButton = this.createButton(panelWidth / 2 - 180, -panelHeight / 2 + 70, 260, 50, 'Select Car', () => this.showCarModal());
-        panel.add(carButton);
+        const customizeHint = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 100, '(Open Settings to customize your car)', {
+            fontFamily: 'Arial',
+            fontSize: '14px',
+            fill: '#8fa8cc',
+            fontStyle: 'italic'
+        }).setOrigin(0, 0.5);
+        panel.add(customizeHint);
 
         // Track section
-        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 130, 'TRACK PRESET', {
+        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 140, 'TRACK PRESET', {
             fontFamily: 'Arial Black',
             fontSize: '24px',
             fill: '#ffd700'
@@ -110,31 +144,31 @@ export class MenuScene extends Phaser.Scene {
         const trackEntries = Object.values(TRACKS);
         const baseTrackX = -panelWidth / 2 + 120;
         trackEntries.forEach((track, index) => {
-            const card = this.createTrackCard(baseTrackX + index * 300, -panelHeight / 2 + 208, track);
+            const card = this.createTrackCard(baseTrackX + index * 300, -panelHeight / 2 + 218, track);
             panel.add(card.container);
             this.trackCards.push(card);
         });
 
         // AI section
-        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 290, 'BOT GRID', {
+        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 300, 'BOT GRID', {
             fontFamily: 'Arial Black',
             fontSize: '24px',
             fill: '#ffd700'
         }).setOrigin(0, 0.5);
 
-        this.aiInfoText = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 332, '', {
+        this.aiInfoText = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 342, '', {
             fontFamily: 'Arial',
             fontSize: '20px',
             fill: '#cfdcff'
         }).setOrigin(0, 0.5);
         panel.add(this.aiInfoText);
 
-        this.aiMinusButton = this.createButton(-panelWidth / 2 + 220, -panelHeight / 2 + 332, 48, 44, '−', () => this.adjustBots(-1));
-        this.aiPlusButton = this.createButton(-panelWidth / 2 + 360, -panelHeight / 2 + 332, 48, 44, '+', () => this.adjustBots(1));
+        this.aiMinusButton = this.createButton(-panelWidth / 2 + 220, -panelHeight / 2 + 342, 48, 44, '−', () => this.adjustBots(-1));
+        this.aiPlusButton = this.createButton(-panelWidth / 2 + 360, -panelHeight / 2 + 342, 48, 44, '+', () => this.adjustBots(1));
         panel.add(this.aiMinusButton);
         panel.add(this.aiPlusButton);
 
-        this.difficultyLabel = this.add.text(panelWidth / 2 - 370, -panelHeight / 2 + 292, 'Difficulty', {
+        this.difficultyLabel = this.add.text(panelWidth / 2 - 370, -panelHeight / 2 + 302, 'Difficulty', {
             fontFamily: 'Arial Black',
             fontSize: '20px',
             fill: '#ffd700'
@@ -143,13 +177,13 @@ export class MenuScene extends Phaser.Scene {
 
         const diffKeys = ['easy', 'medium', 'hard'];
         this.difficultyButtons = diffKeys.map((key, index) => {
-            const btn = this.createToggleButton(panelWidth / 2 - 400 + index * 140, -panelHeight / 2 + 336, 120, 44, DIFFICULTY_LABELS[key], () => this.setDifficulty(key));
+            const btn = this.createToggleButton(panelWidth / 2 - 400 + index * 140, -panelHeight / 2 + 346, 120, 44, DIFFICULTY_LABELS[key], () => this.setDifficulty(key));
             panel.add(btn.container);
             return { key, ...btn };
         });
 
         // Start button
-        this.startButton = this.createButton(0, panelHeight / 2 - 60, 260, 60, 'Start Event', () => this.launchTrack(), {
+        this.startButton = this.createButton(0, panelHeight / 2 - 50, 260, 60, 'Start Event', () => this.launchTrack(), {
             fontSize: '26px',
             primary: true
         });
@@ -261,6 +295,9 @@ export class MenuScene extends Phaser.Scene {
         container.on('pointerdown', () => callback());
 
         return { container, bg, text };
+    }
+
+    selectTrack(trackId) {
     }
 
     createCarModal() {
@@ -500,38 +537,12 @@ export class MenuScene extends Phaser.Scene {
         this.updateDifficultyButtons();
     }
 
-    updateCarModalHighlights() {
-        this.carModalCards.forEach(({ car, bg }) => {
-            if (car.id === this.settings.carId) {
-                bg.setFillStyle(0x1e2f4b, 0.95);
-                bg.setStrokeStyle(3, 0xffd966, 0.85);
-            } else {
-                bg.setFillStyle(0x0c1829, 0.82);
-                bg.setStrokeStyle(2, 0x1f6cee, 0.45);
-            }
-        });
-
-        this.carModalSchemeButtons.forEach(({ schemeButtons }, carId) => {
-            schemeButtons.forEach(({ chip, scheme }) => {
-                if (carId === this.settings.carId && scheme.id === this.settings.schemeId) {
-                    chip.setStrokeStyle(4, 0xffffff, 0.95);
-                    chip.setScale(1.12);
-                } else {
-                    chip.setStrokeStyle(2, scheme.paint.accent, 0.8);
-                    chip.setScale(1);
-                }
-            });
-        });
-    }
-
     refreshSummaries() {
+        this.settings = getSessionSettings();
         this.carSummaryText.setText(getCarDisplayName(this.settings.carId, this.settings.schemeId));
 
         const track = TRACKS[this.settings.trackId] || TRACKS.daytona;
         this.startButton.list[1].setText(`Start ${track.type === 'race' ? 'Race' : 'Session'}`);
-
-        this.settings = setSessionSettings(this.settings);
-        this.updateCarModalHighlights();
     }
 
     launchTrack() {
@@ -541,7 +552,8 @@ export class MenuScene extends Phaser.Scene {
             car: this.settings.carId,
             schemeId: this.settings.schemeId ?? getDefaultSchemeId(this.settings.carId),
             aiCount: track.type === 'race' ? this.settings.aiCount : 0,
-            aiDifficulty: this.settings.aiDifficulty
+            aiDifficulty: this.settings.aiDifficulty,
+            customPhysics: this.settings.customPhysics || {}
         };
         this.scene.start('GameScene', data);
     }
