@@ -29,7 +29,7 @@ export const applyCarPhysics = (car, control, dt, surfaceGrip = 1) => {
     if (control.reverse) {
         car.localVelocity.x = moveTowards(car.localVelocity.x, -data.maxReverseSpeed, data.engineForce * 0.55 * dt);
     } else {
-        car.localVelocity.x += data.engineForce * Phaser.Math.Clamp(control.throttle, 0, 1.2) * dt;
+        car.localVelocity.x += data.engineForce * Phaser.Math.Clamp(control.throttle, 0, 1.25) * dt;
     }
 
     if (control.brake > 0) {
@@ -58,13 +58,13 @@ export const applyCarPhysics = (car, control, dt, surfaceGrip = 1) => {
     let cr = data.cornerStiffnessRear * gripScale;
 
     if (control.handbrake) {
-        cr *= 0.25;
-        const driftDir = signOrDefault(control.steer || car.angularVelocity || car.lastDriftDir);
+        cr *= 0.22;
+        const driftDir = signOrDefault(control.steer || car.localVelocity.y || car.angularVelocity || car.lastDriftDir);
         car.lastDriftDir = driftDir;
-        const slipEnergy = Math.min(Math.abs(vx), data.handbrakeForce) * 0.025;
+        const slipEnergy = Math.min(Math.abs(vx), data.handbrakeForce) * 0.03;
         car.localVelocity.y += driftDir * slipEnergy;
-        car.angularVelocity += driftDir * 1.4 * dt;
-    } else if (control.steer !== 0) {
+        car.angularVelocity += driftDir * 1.45 * dt;
+    } else if (Math.abs(control.steer) > 0.01) {
         car.lastDriftDir = signOrDefault(control.steer);
     }
 
@@ -86,10 +86,10 @@ export const applyCarPhysics = (car, control, dt, surfaceGrip = 1) => {
 
     const yawTorque = data.cgToFront * frontForce - data.cgToRear * rearForce;
     car.angularVelocity = (car.angularVelocity || 0) + (yawTorque / data.inertia) * dt;
-    car.angularVelocity *= 1 - Phaser.Math.Clamp((data.angularDamping || 3) * dt, 0, 0.92);
+    car.angularVelocity *= 1 - Phaser.Math.Clamp((data.angularDamping || 3) * dt, 0, 0.9);
 
     if (Math.abs(car.localVelocity.x) < 1) car.localVelocity.x = 0;
-    if (Math.abs(car.localVelocity.y) < 0.55) car.localVelocity.y = 0;
+    if (Math.abs(car.localVelocity.y) < 0.5) car.localVelocity.y = 0;
     if (Math.abs(car.angularVelocity) < 0.004) car.angularVelocity = 0;
 
     sprite.rotation += car.angularVelocity * dt;

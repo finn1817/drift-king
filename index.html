@@ -1,4 +1,3 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,8 +43,11 @@
             z-index: 10;
         }
 
-        #hud div {
-            min-width: 220px;
+        #hud .hud-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 240px;
             background: rgba(0, 0, 0, 0.65);
             padding: 10px 16px;
             border-radius: 10px;
@@ -58,6 +60,26 @@
             color: #ffd700;
             font-weight: 600;
             letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        #healthBarWrap {
+            flex: 1;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #healthBarFill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #3de47a 0%, #ffc400 55%, #ff5252 100%);
+            transform-origin: left center;
         }
 
         #controls {
@@ -98,9 +120,9 @@
                 padding: 14px 16px;
             }
 
-            #hud div {
+            #hud .hud-row {
                 font-size: 15px;
-                min-width: 180px;
+                min-width: 200px;
             }
         }
     </style>
@@ -109,13 +131,37 @@
     <div id="gameContainer"></div>
 
     <div id="hud">
-        <div id="speedContainer"><span class="label">Speed:</span> <span id="speedDisplay">0</span> MPH</div>
-        <div id="carContainer"><span class="label">Car:</span> <span id="carType">--</span></div>
-        <div id="trackContainer"><span class="label">Track:</span> <span id="trackName">Select a Track</span></div>
-        <div id="weatherContainer"><span class="label">Weather:</span> <span id="weather">Clear ☀️</span></div>
-        <div id="healthContainer" class="hidden"><span class="label">Health:</span> <span id="healthDisplay">--</span></div>
-        <div id="lapContainer" class="hidden"><span class="label">Lap:</span> <span id="lapDisplay">--</span></div>
-        <div id="positionContainer" class="hidden"><span class="label">Position:</span> <span id="positionDisplay">--</span></div>
+        <div class="hud-row" id="speedContainer">
+            <span class="label">Speed</span>
+            <span id="speedDisplay">0</span> MPH
+        </div>
+        <div class="hud-row" id="carContainer">
+            <span class="label">Car</span>
+            <span id="carType">--</span>
+        </div>
+        <div class="hud-row" id="trackContainer">
+            <span class="label">Track</span>
+            <span id="trackName">Select a Track</span>
+        </div>
+        <div class="hud-row" id="weatherContainer">
+            <span class="label">Weather</span>
+            <span id="weather">Clear ☀️</span>
+        </div>
+        <div class="hud-row hidden" id="healthContainer">
+            <span class="label">Health</span>
+            <div id="healthBarWrap">
+                <div id="healthBarFill"></div>
+            </div>
+            <span id="healthDisplay">--</span>
+        </div>
+        <div class="hud-row hidden" id="lapContainer">
+            <span class="label">Lap</span>
+            <span id="lapDisplay">--</span>
+        </div>
+        <div class="hud-row hidden" id="positionContainer">
+            <span class="label">Position</span>
+            <span id="positionDisplay">--</span>
+        </div>
     </div>
 
     <div id="controls">
@@ -126,7 +172,7 @@
         <p><strong>SPACE:</strong> Handbrake (drift assist)</p>
         <p><strong>R:</strong> Reset Car</p>
         <p><strong>T:</strong> Toggle Rain</p>
-        <p><strong>ESC:</strong> Back to Menu</p>
+        <p><strong>ESC:</strong> Back to Menu / Close Modal</p>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>

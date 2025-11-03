@@ -1,10 +1,11 @@
 // js/scenes/game-scene.js
-import { CAR_TYPES } from '../car-presets.js';
+import { CAR_TYPES, getCarScheme } from '../car-presets.js';
 import { TRACKS } from '../track-config.js';
-import { PIXELS_PER_MPH } from '../utils.js';
+import { PIXELS_PER_MPH, clamp, randRange } from '../utils.js';
 import { ensureGameTextures } from '../texture-factory.js';
 import { spawnCar } from '../vehicle-factory.js';
 import { applyCarPhysics } from '../vehicle-physics.js';
+import { AI_PROFILES } from '../ai-profiles.js';
 
 export class GameScene extends Phaser.Scene {
     constructor() {
@@ -14,8 +15,14 @@ export class GameScene extends Phaser.Scene {
     init(data) {
         this.trackId = data.track || 'lot';
         this.carId = data.car || 'drift';
+        this.schemeId = data.schemeId || CAR_TYPES[this.carId].schemes[0].id;
         this.trackConfig = TRACKS[this.trackId] || TRACKS.lot;
         this.carData = CAR_TYPES[this.carId] || CAR_TYPES.drift;
+        this.aiDifficulty = data.aiDifficulty || 'medium';
+        this.aiProfile = AI_PROFILES[this.aiDifficulty] || AI_PROFILES.medium;
+        this.desiredAICount = this.trackConfig.type === 'race'
+            ? Math.min(data.aiCount ?? 0, this.trackConfig.maxAI ?? 0)
+            : 0;
 
         this.worldWidth = this.trackConfig.worldWidth;
         this.worldHeight = this.trackConfig.worldHeight;
@@ -29,7 +36,8 @@ export class GameScene extends Phaser.Scene {
         this.raceState = this.isRaceTrack ? 'grid' : 'free';
         this.surfaceGrip = 1;
         this.isRaining = false;
-        this.lastWallHitTime = 0;
+
+        this.initializeRaceTelemetry();
 
         this.hud = {
             speed: document.getElementById('speedDisplay'),
@@ -38,6 +46,7 @@ export class GameScene extends Phaser.Scene {
             weather: document.getElementById('weather'),
             healthContainer: document.getElementById('healthContainer'),
             health: document.getElementById('healthDisplay'),
+            healthBar: document.getElementById('healthBarFill'),
             lapContainer: document.getElementById('lapContainer'),
             lap: document.getElementById('lapDisplay'),
             positionContainer: document.getElementById('positionContainer'),
@@ -53,6 +62,7 @@ export class GameScene extends Phaser.Scene {
         this.setupControls();
         this.setupCollisions();
         this.createUIOverlays();
+        this.createMinimap();
 
         this.updateHUD(true);
 
@@ -61,9 +71,17 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    initializeRaceTelemetry() {
+        this.raceTimer = 0;
+        this.playerLapStartTime = 0;
+        this.playerLapHistory = [];
+        this.playerLapCounter = 1;
+    }
+
     createWorld() {
         this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
         this.trackWalls = this.physics.add.staticGroup();
+        this.trackArrows = this.add.group();
 
         if (this.trackId === 'lot') {
             this.createLotWorld();
@@ -73,7 +91,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     createLotWorld() {
-        this.add.rectangle(this.worldWidth / 2, this.worldHeight / 2, this.worldWidth, this.worldHeight, 0x303030).setDepth(-10);
+        this.add.rectangle(this.worldWidth / 2, this.worldHeight / 2, this.worldWidth, this.worldHeight, 0x303030).setDepth(-12);
 
         const graphics = this.add.graphics({ depth: -8 });
         graphics.lineStyle(2, 0xffff99, 0.28);
@@ -100,12 +118,12 @@ export class GameScene extends Phaser.Scene {
             innerRadiusY
         } = this.trackConfig;
 
-        this.add.rectangle(this.worldWidth / 2, this.worldHeight / 2, this.worldWidth, this.worldHeight, 0x173018).setDepth(-12);
+        this.add.rectangle(this.worldWidth / 2, this.worldHeight / 2, this.worldWidth, this.worldHeight, 0x173018).setDepth(-14);
 
-        const g = this.add.graphics({ depth: -10 });
+        const g = this.add.graphics({ depth: -12 });
 
         g.fillStyle(0x09121c, 1);
-        g.fillEllipse(centerX, centerY, outerRadiusX * 2 + 300, outerRadiusY * 2 + 300);
+        g.fillEllipse(centerX, centerY, outerRadiusX * 2 + 360, outerRadiusY * 2 + 360);
 
         g.fillStyle(0x1e1e1e, 1);
         g.fillEllipse(centerX, centerY, outerRadiusX * 2, outerRadiusY * 2);
@@ -114,21 +132,40 @@ export class GameScene extends Phaser.Scene {
         g.fillEllipse(centerX, centerY, innerRadiusX * 2, innerRadiusY * 2);
 
         g.lineStyle(10, 0xffffff, 0.55);
-        g.strokeEllipse(centerX, centerY, outerRadiusX * 2 - 120, outerRadiusY * 2 - 120);
+        g.strokeEllipse(centerX, centerY, outerRadiusX * 2 - 180, outerRadiusY * 2 - 180);
 
         g.lineStyle(6, 0xffd700, 0.55);
-        g.strokeEllipse(centerX, centerY, innerRadiusX * 2 + 40, innerRadiusY * 2 + 40);
+        g.strokeEllipse(centerX, centerY, innerRadiusX * 2 + 80, innerRadiusY * 2 + 80);
 
-        const startLine = this.add.rectangle(centerX, centerY + this.trackConfig.midRadiusY - 60, 280, 8, 0xffffff)
+        const startLine = this.add.rectangle(centerX, centerY + this.trackConfig.midRadiusY - 160, 320, 10, 0xffffff)
             .setDepth(-6)
             .setAngle(0);
-        startLine.setAlpha(0.85);
+        startLine.setAlpha(0.9);
 
-        this.createOvalBarrier(this.trackWalls, centerX, centerY, innerRadiusX + 40, innerRadiusY + 40, 96, 80, 90);
-        this.createOvalBarrier(this.trackWalls, centerX, centerY, outerRadiusX + 120, outerRadiusY + 120, 96, 90, 110, true);
+        this.createOvalBarrier(this.trackWalls, centerX, centerY, innerRadiusX + 40, innerRadiusY + 40, 120, 86, 120);
+        this.createOvalBarrier(this.trackWalls, centerX, centerY, outerRadiusX + 160, outerRadiusY + 160, 120, 96, 150, true);
+
+        this.placeTrackArrows();
     }
 
-    createOvalBarrier(group, centerX, centerY, radiusX, radiusY, segments, lengthScalar = 90, thickness = 70, outer = false) {
+    placeTrackArrows() {
+        if (!this.trackConfig.race) return;
+        const waypoints = this.trackConfig.race.waypoints;
+        const step = this.trackConfig.arrowStep ?? 6;
+        for (let i = 0; i < waypoints.length; i += step) {
+            const current = waypoints[i];
+            const next = waypoints[(i + step) % waypoints.length];
+            const angle = Phaser.Math.Angle.Between(current.x, current.y, next.x, next.y);
+            const arrow = this.add.image(current.x, current.y, 'trackArrow');
+            arrow.setRotation(angle);
+            arrow.setDepth(-5);
+            arrow.setAlpha(0.45);
+            arrow.setScale(0.8);
+            this.trackArrows.add(arrow);
+        }
+    }
+
+    createOvalBarrier(group, centerX, centerY, radiusX, radiusY, segments, lengthScalar = 90, thickness = 80, outer = false) {
         const step = Math.PI * 2 / segments;
         for (let i = 0; i < segments; i++) {
             const angle = i * step;
@@ -136,7 +173,7 @@ export class GameScene extends Phaser.Scene {
             const y1 = centerY + Math.sin(angle) * radiusY;
             const x2 = centerX + Math.cos(angle + step) * radiusX;
             const y2 = centerY + Math.sin(angle + step) * radiusY;
-            const segLength = Phaser.Math.Distance.Between(x1, y1, x2, y2) * 1.08 + lengthScalar;
+            const segLength = Phaser.Math.Distance.Between(x1, y1, x2, y2) * 1.05 + lengthScalar;
 
             const wall = group.create((x1 + x2) / 2, (y1 + y2) / 2, 'wallTexture');
             wall.setOrigin(0.5, 0.5);
@@ -159,33 +196,70 @@ export class GameScene extends Phaser.Scene {
 
         this.playerCar = spawnCar(this, {
             carId: this.carId,
+            schemeId: this.schemeId,
             x: playerSpawn.x,
             y: playerSpawn.y,
             angle: playerSpawn.angle,
             isAI: false,
             isRaceTrack: this.isRaceTrack
         });
+
         this.cars.push(this.playerCar);
+        this.hud.carName.textContent = getCarScheme(this.carId, this.schemeId).name;
 
         if (this.isRaceTrack) {
             const raceCfg = this.trackConfig.race;
             this.playerCar.prevWaypoint = raceCfg.waypoints.length - 1;
 
-            for (let i = 0; i < raceCfg.aiCount; i++) {
+            const aiCarPool = Object.keys(CAR_TYPES).filter((id) => id !== this.carId);
+            const totalAI = this.desiredAICount;
+
+            for (let i = 0; i < totalAI; i++) {
                 const spawnIndex = Math.min(i + 1, startPositions.length - 1);
-                const spawn = startPositions[spawnIndex] || playerSpawn;
-                const aiIds = Object.keys(CAR_TYPES).filter((id) => id !== this.carId);
-                const aiCarId = aiIds[i % aiIds.length];
+                const spawn = startPositions[spawnIndex] || {
+                    x: playerSpawn.x + (i + 1) * 80,
+                    y: playerSpawn.y + 40,
+                    angle: playerSpawn.angle
+                };
+
+                let aiCarId = aiCarPool[i % aiCarPool.length];
+                if (this.aiDifficulty === 'hard') {
+                    aiCarId = this.playerCar.id;
+                }
+
+                const carSchemes = CAR_TYPES[aiCarId].schemes;
+                let schemeChoice = carSchemes[0].id;
+                if (aiCarId === this.playerCar.id) {
+                    const alternatives = carSchemes.filter((scheme) => scheme.id !== this.playerCar.schemeId);
+                    if (alternatives.length > 0) {
+                        schemeChoice = alternatives[i % alternatives.length].id;
+                    } else {
+                        schemeChoice = carSchemes[0].id;
+                    }
+                } else {
+                    schemeChoice = carSchemes[i % carSchemes.length].id;
+                }
+
                 const aiCar = spawnCar(this, {
                     carId: aiCarId,
+                    schemeId: schemeChoice,
                     x: spawn.x,
                     y: spawn.y,
                     angle: spawn.angle,
                     isAI: true,
-                    name: `AI #${i + 1}`,
+                    name: `AI (${DIFFICULTY_LABELS[this.aiDifficulty]}) #${i + 1}`,
                     isRaceTrack: true
                 });
                 aiCar.prevWaypoint = raceCfg.waypoints.length - 1;
+                aiCar.aiProfile = this.aiProfile;
+                aiCar.aiMeta = {
+                    throttle: 0,
+                    brake: 0,
+                    steer: 0,
+                    reactionDelay: randRange(0.1, 0.35) * this.aiProfile.reaction,
+                    aggression: randRange(0.85, 1.15) * this.aiProfile.aggression,
+                    targetSpeedBoost: randRange(-2, 2) + this.aiProfile.speedBonus
+                };
                 this.aiCars.push(aiCar);
                 this.cars.push(aiCar);
             }
@@ -252,7 +326,6 @@ export class GameScene extends Phaser.Scene {
             strokeThickness: 6
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1000).setVisible(false);
 
-        // Direction arrow (HUD) to show where to drive in race tracks
         this.directionArrow = this.add.image(640, 90, 'dirArrow')
             .setOrigin(0.5)
             .setScrollFactor(0)
@@ -276,6 +349,7 @@ export class GameScene extends Phaser.Scene {
         let count = 3;
 
         this.countdownText.setText(count.toString()).setVisible(true);
+        this.initializeRaceTelemetry();
 
         this.time.addEvent({
             delay: 1000,
@@ -288,7 +362,6 @@ export class GameScene extends Phaser.Scene {
                     this.countdownText.setText('GO!');
                     this.raceState = 'running';
                     this.disableInput = false;
-                    // Grace period: player cannot take damage for the first 5 seconds
                     if (this.playerCar) {
                         this.playerCar.invulnerableUntil = this.time.now + 5000;
                     }
@@ -341,37 +414,49 @@ export class GameScene extends Phaser.Scene {
         let angleDiff = Phaser.Math.Angle.Wrap(targetAngle - sprite.rotation);
         angleDiff = Phaser.Math.Clamp(angleDiff, -Math.PI, Math.PI);
 
-        const steer = Phaser.Math.Clamp(angleDiff / (Math.PI / 2), -1, 1);
+        const profile = car.aiProfile || this.aiProfile;
+        const meta = car.aiMeta;
+
+        const steerResponsiveness = profile.steerResponsiveness;
+        const steerTarget = Phaser.Math.Clamp(angleDiff / (Math.PI / (2 * steerResponsiveness)), -1, 1);
+        meta.steer = Phaser.Math.Linear(meta.steer || 0, steerTarget, 0.18);
 
         const speedMph = car.carSpeedMph || 0;
-        const targetTop = Math.min(car.data.topSpeedMph - 2, 78);
+        const targetTop = Math.min(car.data.topSpeedMph + (meta.targetSpeedBoost || 0), 88);
         let throttle = 1;
 
         const angleSeverity = Math.abs(angleDiff);
-        if (angleSeverity > 0.6) throttle = 0.7;
+        if (angleSeverity > 0.6) throttle = 0.75;
         if (angleSeverity > 0.9) throttle = 0.45;
         if (angleSeverity > 1.2) throttle = 0.2;
 
-        if (speedMph > targetTop + 3) throttle = Math.min(throttle, 0.3);
-        if (speedMph > targetTop + 6) throttle = 0;
+        if (speedMph > targetTop + 2) throttle = Math.min(throttle, 0.3);
+        if (speedMph > targetTop + 5) throttle = 0;
 
         let brake = 0;
-        if (speedMph > targetTop + 7) brake = 0.45;
-        if (speedMph > targetTop + 12) brake = 0.8;
+        if (speedMph > targetTop + 6) brake = 0.45;
+        if (speedMph > targetTop + 10) brake = 0.8;
 
-        const playerProgress = this.playerCar.raceProgress || 0;
+        const jitter = randRange(-profile.jitter, profile.jitter);
+        throttle = Phaser.Math.Clamp((throttle + jitter) * profile.throttleScale, 0, 1.2);
+        brake = Phaser.Math.Clamp(brake * profile.brakeScale, 0, 1);
+
+        const playerProgress = this.playerCar?.raceProgress || 0;
         if (!car.finished && !this.playerCar.finished) {
-            if (car.raceProgress < playerProgress - 0.12) {
-                throttle = Math.min(1.05, throttle + 0.3);
-            } else if (car.raceProgress > playerProgress + 0.18) {
-                throttle = Math.max(0.55, throttle - 0.35);
+            if (car.raceProgress < playerProgress - 0.25) {
+                throttle = Math.min(1.15, throttle + 0.35 * (meta.aggression || 1));
+            } else if (car.raceProgress > playerProgress + 0.2) {
+                throttle = Math.max(0.45, throttle - 0.25);
             }
         }
 
+        meta.throttle = Phaser.Math.Linear(meta.throttle || 0, throttle, 0.1);
+        meta.brake = Phaser.Math.Linear(meta.brake || 0, brake, 0.15);
+
         return {
-            throttle: Phaser.Math.Clamp(throttle, 0, 1.1),
-            brake,
-            steer,
+            throttle: Phaser.Math.Clamp(meta.throttle, 0, 1.2),
+            brake: Phaser.Math.Clamp(meta.brake, 0, 1),
+            steer: Phaser.Math.Clamp(meta.steer, -1, 1),
             reverse: false,
             handbrake: false
         };
@@ -384,42 +469,42 @@ export class GameScene extends Phaser.Scene {
         const dx = sprite.x - cfg.centerX;
         const dy = sprite.y - cfg.centerY;
 
-        const innerA = cfg.innerRadiusX + 60;
-        const innerB = cfg.innerRadiusY + 60;
+        const innerA = cfg.innerRadiusX + 80;
+        const innerB = cfg.innerRadiusY + 80;
         const innerValue = (dx * dx) / (innerA * innerA) + (dy * dy) / (innerB * innerB);
 
         if (innerValue < 1) {
             const factor = 1 / Math.sqrt(innerValue);
-            const targetX = cfg.centerX + dx * factor * 1.015;
-            const targetY = cfg.centerY + dy * factor * 1.015;
+            const targetX = cfg.centerX + dx * factor * 1.02;
+            const targetY = cfg.centerY + dy * factor * 1.02;
 
             sprite.setPosition(targetX, targetY);
             sprite.body.position.set(targetX - sprite.body.halfWidth, targetY - sprite.body.halfHeight);
             sprite.body.velocity.set(sprite.body.velocity.x * 0.6, sprite.body.velocity.y * -0.1);
 
             car.localVelocity.x *= 0.6;
-            car.localVelocity.y *= -0.4;
+            car.localVelocity.y *= -0.35;
             car.angularVelocity *= 0.25;
 
             this.registerBoundaryHit(car, 'inner');
         }
 
-        const outerA = cfg.outerRadiusX - 90;
-        const outerB = cfg.outerRadiusY - 90;
+        const outerA = cfg.outerRadiusX - 160;
+        const outerB = cfg.outerRadiusY - 160;
         const outerValue = (dx * dx) / (outerA * outerA) + (dy * dy) / (outerB * outerB);
 
         if (outerValue > 1) {
             const factor = 1 / Math.sqrt(outerValue);
-            const targetX = cfg.centerX + dx * factor * 0.985;
-            const targetY = cfg.centerY + dy * factor * 0.985;
+            const targetX = cfg.centerX + dx * factor * 0.98;
+            const targetY = cfg.centerY + dy * factor * 0.98;
 
             sprite.setPosition(targetX, targetY);
             sprite.body.position.set(targetX - sprite.body.halfWidth, targetY - sprite.body.halfHeight);
-            sprite.body.velocity.set(sprite.body.velocity.x * -0.2, sprite.body.velocity.y * 0.4);
+            sprite.body.velocity.set(sprite.body.velocity.x * -0.25, sprite.body.velocity.y * 0.35);
 
-            car.localVelocity.x *= -0.3;
-            car.localVelocity.y *= 0.25;
-            car.angularVelocity *= 0.35;
+            car.localVelocity.x *= -0.35;
+            car.localVelocity.y *= 0.2;
+            car.angularVelocity *= 0.3;
 
             this.registerBoundaryHit(car, 'outer');
         }
@@ -428,12 +513,12 @@ export class GameScene extends Phaser.Scene {
     registerBoundaryHit(car, type) {
         if (!this.isRaceTrack) return;
         const now = this.time.now;
-        if (now - car.lastBoundaryHit > 500) {
-            const dmg = type === 'outer' ? 14 : 8;
-            this.applyDamage(car, dmg, 'wall');
+        if (now - car.lastBoundaryHit > 600) {
+            const base = type === 'outer' ? 18 : 12;
+            this.applyDamage(car, base, 'wall', car.carSpeedMph);
             car.lastBoundaryHit = now;
             if (car === this.playerCar) {
-                this.showRaceMessage(type === 'outer' ? 'Outside wall! Easy on the throttle.' : 'Stay off the apron!', 1100);
+                this.showRaceMessage(type === 'outer' ? 'Outside wall! Ease up.' : 'Stay off the apron!', 1100);
             }
         }
     }
@@ -471,6 +556,16 @@ export class GameScene extends Phaser.Scene {
         const segmentProgress = (car.prevWaypoint + alongSegment) / total;
         car.raceProgress = lapBase + segmentProgress;
 
+        if (car === this.playerCar && !car.finished && car.lap > this.playerLapCounter) {
+            const lapTime = this.raceTimer - this.playerLapStartTime;
+            if (lapTime > 1) {
+                this.playerLapHistory.push(lapTime);
+                this.showRaceMessage(`Lap ${this.playerLapHistory.length} complete • ${lapTime.toFixed(2)}s`, 2300);
+            }
+            this.playerLapStartTime = this.raceTimer;
+            this.playerLapCounter = car.lap;
+        }
+
         if (car.lap > raceCfg.laps && !car.finished) {
             car.finished = true;
             car.raceProgress = raceCfg.laps + (this.finishOrder.length + 1) / 10;
@@ -500,7 +595,7 @@ export class GameScene extends Phaser.Scene {
             if (this.playerCar.finished) {
                 this.hud.lap.textContent = `Finished`;
             } else {
-                const currentLap = Phaser.Math.Clamp(this.playerCar.lap, 1, laps);
+                const currentLap = clamp(this.playerCar.lap, 1, laps);
                 this.hud.lap.textContent = `${currentLap} / ${laps}`;
             }
         }
@@ -511,15 +606,16 @@ export class GameScene extends Phaser.Scene {
         if (!car) return;
 
         const impactSpeed = car.speed || sprite.body.speed;
-        if (impactSpeed < 70) return;
+        if (impactSpeed < 60) return;
 
         car.localVelocity.x *= 0.55;
         car.localVelocity.y *= -0.35;
         car.angularVelocity *= -0.32;
 
         if (this.isRaceTrack) {
-            const dmg = Phaser.Math.Clamp(Math.round((impactSpeed / (car.data.topSpeed || 1)) * 18), 6, 24);
-            this.applyDamage(car, dmg, 'wall');
+            const mph = Math.max(car.carSpeedMph, impactSpeed / PIXELS_PER_MPH);
+            const baseDamage = Phaser.Math.Clamp(Math.round((mph / (car.data.topSpeedMph || 1)) * 20), 6, 24);
+            this.applyDamage(car, baseDamage, 'wall', mph);
         }
     }
 
@@ -531,30 +627,35 @@ export class GameScene extends Phaser.Scene {
         const dvx = spriteA.body.velocity.x - spriteB.body.velocity.x;
         const dvy = spriteA.body.velocity.y - spriteB.body.velocity.y;
         const relativeSpeed = Math.sqrt(dvx * dvx + dvy * dvy);
+        const relativeMph = relativeSpeed / PIXELS_PER_MPH;
 
-        if (relativeSpeed < 40) return;
+        if (relativeSpeed < 35) return;
 
         carA.localVelocity.x *= 0.82;
         carB.localVelocity.x *= 0.82;
-        carA.localVelocity.y += (Math.random() - 0.5) * 30;
-        carB.localVelocity.y += (Math.random() - 0.5) * 30;
+        carA.localVelocity.y += (Math.random() - 0.5) * 24;
+        carB.localVelocity.y += (Math.random() - 0.5) * 24;
 
         if (this.isRaceTrack) {
-            const dmg = Phaser.Math.Clamp(Math.round((relativeSpeed / carA.data.topSpeed) * 20), 5, 26);
-            this.applyDamage(carA, dmg, 'collision');
-            this.applyDamage(carB, dmg, 'collision');
+            const base = Phaser.Math.Clamp(Math.round((relativeMph / (carA.data.topSpeedMph || 1)) * 24), 4, 28);
+            this.applyDamage(carA, base, 'collision', relativeMph);
+            this.applyDamage(carB, base, 'collision', relativeMph);
         }
     }
 
-    applyDamage(car, amount, source = '') {
+    applyDamage(car, baseAmount, source = '', impactMph = 0) {
         if (!car || car.retired || !this.isRaceTrack) return;
 
-        // Skip damage during player grace period at race start
         if (car.invulnerableUntil && this.time.now < car.invulnerableUntil) {
             return;
         }
 
-        car.health = Math.max(0, car.health - amount);
+        const speedRatio = impactMph ? Phaser.Math.Clamp(impactMph / (car.data.topSpeedMph || 1), 0, 2.5) : 0.6;
+        const durability = car.durability || 1;
+        const scaledDamage = baseAmount * (0.45 + speedRatio) / durability;
+        const finalDamage = Math.max(1, Math.round(scaledDamage));
+
+        car.health = Math.max(0, car.health - finalDamage);
         car.localVelocity.x *= 0.78;
         car.localVelocity.y *= 0.55;
         car.angularVelocity *= 0.45;
@@ -589,7 +690,14 @@ export class GameScene extends Phaser.Scene {
             this.disableInput = true;
             const placement = this.playerCar.position || this.racers.length;
             const suffix = placement === 1 ? 'st' : placement === 2 ? 'nd' : placement === 3 ? 'rd' : 'th';
-            this.showRaceMessage(`Race Complete! You finished ${placement}${suffix}.`, 4000);
+            const bestLap = this.playerLapHistory.length > 0
+                ? Math.min(...this.playerLapHistory).toFixed(2)
+                : null;
+            let message = `Race Complete! You finished ${placement}${suffix}.`;
+            if (bestLap) {
+                message += ` Best lap ${bestLap}s.`;
+            }
+            this.showRaceMessage(message, 5000);
         }
     }
 
@@ -629,12 +737,14 @@ export class GameScene extends Phaser.Scene {
             car.retired = false;
             car.sprite.clearTint();
             car.sprite.body.enable = true;
+            car.invulnerableUntil = this.time.now + 4000;
+
             this.finishOrder = [];
-            this.aiCars.forEach((ai) => {
-                const aiSpawn = this.trackConfig.startPositions[1] || spawn;
-                ai.sprite.setPosition(aiSpawn.x, aiSpawn.y);
-                ai.sprite.body.position.set(aiSpawn.x - ai.sprite.body.halfWidth, aiSpawn.y - ai.sprite.body.halfHeight);
-                ai.sprite.setRotation(aiSpawn.angle);
+            this.aiCars.forEach((ai, index) => {
+                const spawnTarget = this.trackConfig.startPositions[index + 1] || spawn;
+                ai.sprite.setPosition(spawnTarget.x, spawnTarget.y);
+                ai.sprite.body.position.set(spawnTarget.x - ai.sprite.body.halfWidth, spawnTarget.y - ai.sprite.body.halfHeight);
+                ai.sprite.setRotation(spawnTarget.angle);
                 ai.sprite.body.setVelocity(0, 0);
                 ai.localVelocity.set(0, 0);
                 ai.angularVelocity = 0;
@@ -647,7 +757,7 @@ export class GameScene extends Phaser.Scene {
                 ai.retired = false;
                 ai.sprite.clearTint();
             });
-            this.raceState = 'countdown';
+
             this.startRaceCountdown();
             this.showRaceMessage('Reset complete. Countdown restarting.', 1800);
         } else {
@@ -670,14 +780,109 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    createMinimap() {
+        const cam = this.cameras.main;
+        const size = 220;
+        const x = cam.width - size - 28;
+        const y = 24;
+
+        this.minimapConfig = {
+            x,
+            y,
+            size
+        };
+
+        this.minimapGraphics = this.add.graphics()
+            .setScrollFactor(0)
+            .setDepth(1001);
+    }
+
+    drawMinimap() {
+        if (!this.minimapGraphics) return;
+
+        const { x, y, size } = this.minimapConfig;
+        const g = this.minimapGraphics;
+        g.clear();
+
+        g.fillStyle(0x000000, 0.65);
+        g.fillRoundedRect(x, y, size, size, 16);
+        g.lineStyle(2, 0xffffff, 0.7);
+        g.strokeRoundedRect(x, y, size, size, 16);
+
+        const scale = Math.min((size - 40) / this.worldWidth, (size - 40) / this.worldHeight);
+        const offsetX = x + (size - this.worldWidth * scale) / 2;
+        const offsetY = y + (size - this.worldHeight * scale) / 2;
+
+        if (this.trackId === 'daytona') {
+            g.lineStyle(2, 0x3ec1ff, 0.75);
+            g.strokeEllipse(
+                x + size / 2,
+                y + size / 2,
+                this.trackConfig.outerRadiusX * 2 * scale,
+                this.trackConfig.outerRadiusY * 2 * scale
+            );
+            g.lineStyle(2, 0xf5ca50, 0.6);
+            g.strokeEllipse(
+                x + size / 2,
+                y + size / 2,
+                this.trackConfig.innerRadiusX * 2 * scale,
+                this.trackConfig.innerRadiusY * 2 * scale
+            );
+        } else if (this.trackId === 'lot') {
+            g.lineStyle(2, 0x46ff9d, 0.7);
+            g.strokeRect(offsetX, offsetY, this.worldWidth * scale, this.worldHeight * scale);
+        }
+
+        this.cars.forEach((car) => {
+            const color = car === this.playerCar ? 0xff5252 : car.isAI ? 0x4ec9ff : 0xffffff;
+            const px = offsetX + car.sprite.x * scale;
+            const py = offsetY + car.sprite.y * scale;
+
+            g.fillStyle(color, 1);
+            g.fillCircle(px, py, car === this.playerCar ? 5 : 4);
+
+            const headingLength = car === this.playerCar ? 18 : 14;
+            g.lineStyle(1.5, color, 0.8);
+            g.beginPath();
+            g.moveTo(px, py);
+            g.lineTo(px + Math.cos(car.sprite.rotation) * headingLength, py + Math.sin(car.sprite.rotation) * headingLength);
+            g.strokePath();
+        });
+    }
+
+    updateHUD(force = false) {
+        if (!this.playerCar) return;
+
+        this.hud.speed.textContent = this.playerCar.carSpeedMph;
+        this.hud.carName.textContent = `${this.playerCar.data.name} • ${this.playerCar.scheme.name}`;
+        this.hud.trackName.textContent = this.trackConfig.name;
+
+        if (this.isRaceTrack || force) {
+            const healthRatio = Math.max(0, Math.round((this.playerCar.health / this.playerCar.maxHealth) * 100));
+            this.hud.health.textContent = this.playerCar.retired ? '0%' : `${healthRatio}%`;
+            this.hud.healthBar.style.width = `${healthRatio}%`;
+        } else {
+            this.hud.health.textContent = '∞';
+            this.hud.healthBar.style.width = '100%';
+        }
+
+        if (!this.isRaceTrack) {
+            this.hud.lap.textContent = '--';
+            this.hud.position.textContent = '--';
+        }
+    }
+
     update(_, delta) {
         if (!this.playerCar) return;
 
         const dt = delta / 1000;
 
-        if (this.keys.menu.isDown) {
+        if (this.keys.menu.isDown && !this.ctMenuPing) {
+            this.ctMenuPing = true;
             this.scene.start('MenuScene');
             return;
+        } else if (!this.keys.menu.isDown) {
+            this.ctMenuPing = false;
         }
 
         if (Phaser.Input.Keyboard.JustDown(this.keys.weather) && this.trackConfig.allowRain) {
@@ -686,6 +891,10 @@ export class GameScene extends Phaser.Scene {
 
         if (Phaser.Input.Keyboard.JustDown(this.keys.reset)) {
             this.resetPlayerCar();
+        }
+
+        if (this.raceState === 'running') {
+            this.raceTimer += dt;
         }
 
         const playerControl = this.getPlayerControls();
@@ -716,8 +925,8 @@ export class GameScene extends Phaser.Scene {
         }
 
         this.updateHUD();
+        this.drawMinimap();
 
-        // Update driving direction arrow (points from player's heading to next waypoint)
         if (this.isRaceTrack && this.directionArrow && this.playerCar && !this.playerCar.finished) {
             const raceCfg = this.trackConfig.race;
             const wp = raceCfg.waypoints[this.playerCar.nextWaypoint];
@@ -726,30 +935,10 @@ export class GameScene extends Phaser.Scene {
                 const targetAngle = Phaser.Math.Angle.Between(sprite.x, sprite.y, wp.x, wp.y);
                 const angleDiff = Phaser.Math.Angle.Wrap(targetAngle - sprite.rotation);
                 this.directionArrow.setVisible(true);
-                this.directionArrow.rotation = angleDiff; // Up (0) means aligned
+                this.directionArrow.rotation = angleDiff;
             }
         } else if (this.directionArrow) {
             this.directionArrow.setVisible(false);
-        }
-    }
-
-    updateHUD(force = false) {
-        if (!this.playerCar) return;
-
-        this.hud.speed.textContent = this.playerCar.carSpeedMph;
-        this.hud.carName.textContent = this.playerCar.data.name;
-        this.hud.trackName.textContent = this.trackConfig.name;
-
-        if (this.isRaceTrack || force) {
-            const healthRatio = Math.max(0, Math.round((this.playerCar.health / this.playerCar.maxHealth) * 100));
-            this.hud.health.textContent = this.playerCar.retired ? '0%' : `${healthRatio}%`;
-        } else {
-            this.hud.health.textContent = '∞';
-        }
-
-        if (!this.isRaceTrack) {
-            this.hud.lap.textContent = '--';
-            this.hud.position.textContent = '--';
         }
     }
 }

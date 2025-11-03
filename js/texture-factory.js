@@ -8,34 +8,38 @@ export const ensureGameTextures = (scene) => {
     ensureCarTextures(scene);
     ensureWallTexture(scene);
     ensureDirectionArrowTexture(scene);
+    ensureTrackArrowTexture(scene);
 };
 
 const ensureCarTextures = (scene) => {
     Object.values(CAR_TYPES).forEach((car) => {
-        const key = `car_${car.id}`;
-        if (scene.textures.exists(key)) return;
+        car.schemes.forEach((scheme) => {
+            const key = `car_${car.id}_${scheme.id}`;
+            if (scene.textures.exists(key)) return;
 
-        const g = scene.make.graphics({ x: 0, y: 0, add: false });
+            const paint = scheme.paint;
+            const g = scene.make.graphics({ x: 0, y: 0, add: false });
 
-        g.fillStyle(0x0d0d0d, 1);
-        g.fillRoundedRect(0, 0, CAR_WIDTH, CAR_HEIGHT, 22);
+            g.fillStyle(0x0d0d0d, 1);
+            g.fillRoundedRect(0, 0, CAR_WIDTH, CAR_HEIGHT, 22);
 
-        g.fillStyle(car.paint.base, 1);
-        g.fillRoundedRect(6, 8, CAR_WIDTH - 12, CAR_HEIGHT - 16, 18);
+            g.fillStyle(paint.base, 1);
+            g.fillRoundedRect(6, 8, CAR_WIDTH - 12, CAR_HEIGHT - 16, 18);
 
-        g.fillStyle(car.paint.secondary, 1);
-        g.fillRoundedRect(20, 14, CAR_WIDTH - 40, CAR_HEIGHT - 28, 14);
+            g.fillStyle(paint.secondary, 1);
+            g.fillRoundedRect(20, 14, CAR_WIDTH - 40, CAR_HEIGHT - 28, 14);
 
-        drawDecal(g, car.paint);
+            drawDecal(g, paint);
 
-        g.fillStyle(0xffffff, 0.92);
-        g.fillRoundedRect(CAR_WIDTH - 34, CAR_HEIGHT / 2 - 12, 20, 24, 6);
+            g.fillStyle(0xffffff, 0.92);
+            g.fillRoundedRect(CAR_WIDTH - 36, CAR_HEIGHT / 2 - 13, 22, 26, 6);
 
-        g.lineStyle(4, 0xffffff, 0.35);
-        g.strokeRoundedRect(6, 8, CAR_WIDTH - 12, CAR_HEIGHT - 16, 18);
+            g.lineStyle(4, 0xffffff, 0.35);
+            g.strokeRoundedRect(6, 8, CAR_WIDTH - 12, CAR_HEIGHT - 16, 18);
 
-        g.generateTexture(key, CAR_WIDTH, CAR_HEIGHT);
-        g.destroy();
+            g.generateTexture(key, CAR_WIDTH, CAR_HEIGHT);
+            g.destroy();
+        });
     });
 };
 
@@ -94,28 +98,48 @@ const ensureWallTexture = (scene) => {
 const ensureDirectionArrowTexture = (scene) => {
     if (scene.textures.exists('dirArrow')) return;
     const g = scene.make.graphics({ x: 0, y: 0, add: false });
-    // Draw a simple HUD arrow pointing up by default
     const w = 48, h = 54;
-    g.clear();
     g.fillStyle(0x00d4ff, 0.95);
     g.beginPath();
-    g.moveTo(w / 2, 2);         // tip (top)
-    g.lineTo(w - 6, h - 8);     // right base
-    g.lineTo(w / 2, h - 18);    // inner bottom
-    g.lineTo(6, h - 8);         // left base
+    g.moveTo(w / 2, 2);
+    g.lineTo(w - 6, h - 8);
+    g.lineTo(w / 2, h - 18);
+    g.lineTo(6, h - 8);
     g.closePath();
     g.fillPath();
-
     g.lineStyle(3, 0xffffff, 0.9);
     g.strokePath();
-
-    // center line
     g.lineStyle(3, 0xffffff, 0.85);
     g.beginPath();
     g.moveTo(w / 2, h - 16);
     g.lineTo(w / 2, 8);
     g.strokePath();
-
     g.generateTexture('dirArrow', w, h);
+    g.destroy();
+};
+
+const ensureTrackArrowTexture = (scene) => {
+    if (scene.textures.exists('trackArrow')) return;
+    const g = scene.make.graphics({ x: 0, y: 0, add: false });
+    const w = 180, h = 64;
+    g.fillStyle(0xffd53d, 0.85);
+    g.beginPath();
+    g.moveTo(10, h / 2 - 12);
+    g.lineTo(w - 42, h / 2 - 12);
+    g.lineTo(w - 42, 8);
+    g.lineTo(w - 8, h / 2);
+    g.lineTo(w - 42, h - 8);
+    g.lineTo(w - 42, h / 2 + 12);
+    g.lineTo(10, h / 2 + 12);
+    g.closePath();
+    g.fillPath();
+
+    g.lineStyle(6, 0xffffff, 0.6);
+    g.beginPath();
+    g.moveTo(16, h / 2);
+    g.lineTo(w - 48, h / 2);
+    g.strokePath();
+
+    g.generateTexture('trackArrow', w, h);
     g.destroy();
 };

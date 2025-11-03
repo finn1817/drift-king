@@ -2,17 +2,17 @@
 const TWO_PI = Math.PI * 2;
 
 const createDaytonaConfig = () => {
-    const worldWidth = 6200;
-    const worldHeight = 3800;
+    const worldWidth = 9200;
+    const worldHeight = 5600;
     const centerX = worldWidth / 2;
     const centerY = worldHeight / 2;
-    const outerRadiusX = 2300;
-    const outerRadiusY = 1300;
-    const innerRadiusX = 1700;
-    const innerRadiusY = 850;
+    const outerRadiusX = 3600;
+    const outerRadiusY = 2100;
+    const innerRadiusX = 2550;
+    const innerRadiusY = 1450;
     const midRadiusX = (outerRadiusX + innerRadiusX) / 2;
     const midRadiusY = (outerRadiusY + innerRadiusY) / 2;
-    const segments = 64;
+    const segments = 96;
     const baseAngle = Math.PI / 2;
 
     const waypoints = [];
@@ -23,12 +23,14 @@ const createDaytonaConfig = () => {
         waypoints.push({ x, y });
     }
 
-    const laneSpacing = 120;
-    const startY = centerY + midRadiusY - 60;
-    const startPositions = [
-        { x: centerX - laneSpacing * 0.5, y: startY, angle: -Math.PI / 2 },
-        { x: centerX + laneSpacing * 0.5, y: startY, angle: -Math.PI / 2 }
-    ];
+    const laneSpacing = 200;
+    const startY = centerY + midRadiusY - 210;
+    const laneOffsets = [-1.5, -0.5, 0.5, 1.5];
+    const startPositions = laneOffsets.map((offset) => ({
+        x: centerX + offset * laneSpacing,
+        y: startY,
+        angle: -Math.PI / 2
+    }));
 
     return {
         worldWidth,
@@ -43,7 +45,9 @@ const createDaytonaConfig = () => {
         midRadiusY,
         trackWidth: outerRadiusX - innerRadiusX,
         waypoints,
-        startPositions
+        startPositions,
+        maxAI: 3,
+        arrowStep: 6
     };
 };
 
@@ -57,18 +61,19 @@ export const TRACKS = {
         type: 'drift',
         worldWidth: 5200,
         worldHeight: 5200,
-        cameraZoom: 0.8,
+        cameraZoom: 0.78,
         startPositions: [{ x: 2600, y: 2600, angle: -Math.PI / 2 }],
-        allowRain: true
+        allowRain: true,
+        maxAI: 0
     },
     daytona: {
         id: 'daytona',
         name: 'Sunset Speedway (Daytona Style)',
-        description: 'High-speed oval with gentle banking. Includes AI rival.',
+        description: 'High-speed oval with gentle banking. Includes AI rivals.',
         type: 'race',
         worldWidth: DAYTONA_CONFIG.worldWidth,
         worldHeight: DAYTONA_CONFIG.worldHeight,
-        cameraZoom: 0.63,
+        cameraZoom: 0.6,
         allowRain: true,
         startPositions: DAYTONA_CONFIG.startPositions,
         outerRadiusX: DAYTONA_CONFIG.outerRadiusX,
@@ -80,11 +85,14 @@ export const TRACKS = {
         centerX: DAYTONA_CONFIG.centerX,
         centerY: DAYTONA_CONFIG.centerY,
         trackWidth: DAYTONA_CONFIG.trackWidth,
+        maxAI: DAYTONA_CONFIG.maxAI,
+        arrowStep: DAYTONA_CONFIG.arrowStep,
         race: {
             laps: 3,
-            waypointRadius: 240,
+            waypointRadius: 270,
             waypoints: DAYTONA_CONFIG.waypoints,
-            aiCount: 1
+            aiCount: 1,
+            estimatedLapSeconds: 68
         }
     }
 };
