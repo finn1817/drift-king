@@ -134,6 +134,13 @@
         const mphToPixels = mph => mph * PIXELS_PER_MPH;
         const DEG2RAD = Math.PI / 180;
 
+        // Helper: Move a value towards a target by at most maxDelta (no overshoot)
+        const moveTowards = (current, target, maxDelta) => {
+            if (current < target) return Math.min(current + maxDelta, target);
+            if (current > target) return Math.max(current - maxDelta, target);
+            return target;
+        };
+
         const CAR_TYPES = {
             drift: {
                 id: 'drift',
@@ -998,14 +1005,14 @@
                 car.currentSteer = Phaser.Math.Angle.RotateTo(car.currentSteer || 0, desiredSteer, data.steerRate * dt);
 
                 if (control.reverse) {
-                    car.localVelocity.x = Phaser.Math.MoveTowards(car.localVelocity.x, -data.maxReverseSpeed, data.engineForce * 0.55 * dt);
+                    car.localVelocity.x = moveTowards(car.localVelocity.x, -data.maxReverseSpeed, data.engineForce * 0.55 * dt);
                 } else {
                     car.localVelocity.x += data.engineForce * control.throttle * dt;
                 }
 
                 if (control.brake > 0) {
                     const brakeEffect = data.brakeForce * control.brake * dt;
-                    car.localVelocity.x = Phaser.Math.MoveTowards(car.localVelocity.x, 0, brakeEffect);
+                    car.localVelocity.x = moveTowards(car.localVelocity.x, 0, brakeEffect);
                 }
 
                 const longDrag = data.longitudinalDrag || 0.24;
@@ -1015,7 +1022,7 @@
                 car.localVelocity.x -= speedSign * (data.rollingResistance || 6) * dt;
 
                 if (control.handbrake) {
-                    car.localVelocity.x = Phaser.Math.MoveTowards(car.localVelocity.x, 0, data.handbrakeForce * dt * 0.8);
+                    car.localVelocity.x = moveTowards(car.localVelocity.x, 0, data.handbrakeForce * dt * 0.8);
                 }
 
                 car.localVelocity.x = Phaser.Math.Clamp(car.localVelocity.x, -data.maxReverseSpeed, data.topSpeed);
