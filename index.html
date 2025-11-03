@@ -249,12 +249,13 @@
 
             createPlayer() {
                 // Create a simple car texture via Graphics
+                // IMPORTANT: Phaser angle 0 faces to the RIGHT, so make car's "front" point right.
                 const g = this.add.graphics();
                 g.fillStyle(this.carData.color, 1);
-                g.fillRect(0, 0, 60, 100);
+                g.fillRect(0, 0, 100, 60); // body (wide)
                 g.fillStyle(0xffffff, 1);
-                g.fillRect(20, 5, 20, 12); // front indicator
-                g.generateTexture('carTexture', 60, 100);
+                g.fillRect(85, 24, 10, 12); // small front indicator at the right
+                g.generateTexture('carTexture', 100, 60);
                 g.destroy();
 
                 // Arcade physics sprite for the car
@@ -264,7 +265,7 @@
                 this.player.setDamping(true);
                 this.player.setDrag(0.02); // linear damping factor (with useDamping)
                 this.player.setMaxVelocity(this.carData.topSpeed);
-                this.player.rotation = -Math.PI / 2; // face up initially
+                this.player.rotation = -Math.PI / 2; // face up initially (but forward now matches rotation)
 
                 // Simple speed tracker for HUD (pixels/sec)
                 this.player.carSpeed = 0;
