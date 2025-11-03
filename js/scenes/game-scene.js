@@ -39,6 +39,9 @@ export class GameScene extends Phaser.Scene {
 
         this.initializeRaceTelemetry();
 
+    // Track colliders so we can toggle ghosting (disable car-vs-car collisions briefly)
+    this._colliders = { carVsCar: [], carVsWalls: [] };
+
         this.hud = {
             speed: document.getElementById('speedDisplay'),
             carName: document.getElementById('carType'),
@@ -294,17 +297,20 @@ export class GameScene extends Phaser.Scene {
     setupCollisions() {
         if (this.trackWalls) {
             this.cars.forEach((car) => {
-                this.physics.add.collider(car.sprite, this.trackWalls, this.handleCarWallCollision, null, this);
+                const c = this.physics.add.collider(car.sprite, this.trackWalls, this.handleCarWallCollision, null, this);
+                this._colliders.carVsWalls.push(c);
             });
         }
 
         this.aiCars.forEach((aiCar) => {
-            this.physics.add.collider(this.playerCar.sprite, aiCar.sprite, this.handleCarVsCarCollision, null, this);
+            const c = this.physics.add.collider(this.playerCar.sprite, aiCar.sprite, this.handleCarVsCarCollision, null, this);
+            this._colliders.carVsCar.push(c);
         });
 
         for (let i = 0; i < this.aiCars.length; i++) {
             for (let j = i + 1; j < this.aiCars.length; j++) {
-                this.physics.add.collider(this.aiCars[i].sprite, this.aiCars[j].sprite, this.handleCarVsCarCollision, null, this);
+                const c = this.physics.add.collider(this.aiCars[i].sprite, this.aiCars[j].sprite, this.handleCarVsCarCollision, null, this);
+                this._colliders.carVsCar.push(c);
             }
         }
     }
@@ -365,10 +371,17 @@ export class GameScene extends Phaser.Scene {
                     if (this.playerCar) {
                         this.playerCar.invulnerableUntil = this.time.now + 5000;
                     }
+                    // Ghosting: disable car-vs-car collisions briefly to avoid turn 1 pileups
+                    this.setCarVsCarCollidersActive(false);
+                    this.time.delayedCall(3000, () => this.setCarVsCarCollidersActive(true));
                     this.time.delayedCall(700, () => this.countdownText.setVisible(false));
                 }
             }
         });
+    }
+
+    setCarVsCarCollidersActive(active) {
+        (this._colliders.carVsCar || []).forEach(c => c.active = active);
     }
 
     getPlayerControls() {
@@ -421,9 +434,9 @@ export class GameScene extends Phaser.Scene {
         const steerTarget = Phaser.Math.Clamp(angleDiff / (Math.PI / (2 * steerResponsiveness)), -1, 1);
         meta.steer = Phaser.Math.Linear(meta.steer || 0, steerTarget, 0.18);
 
-        const speedMph = car.carSpeedMph || 0;
-        const targetTop = Math.min(car.data.topSpeedMph + (meta.targetSpeedBoost || 0), 88);
-        let throttle = 1;
+    const speedMph = car.carSpeedMph || 0;
+    const targetTop = Math.min(car.data.topSpeedMph + (meta.targetSpeedBoost || 0), 88);
+    let throttle = 1;
 
         const angleSeverity = Math.abs(angleDiff);
         if (angleSeverity > 0.6) throttle = 0.75;
@@ -436,6 +449,26 @@ export class GameScene extends Phaser.Scene {
         let brake = 0;
         if (speedMph > targetTop + 6) brake = 0.45;
         if (speedMph > targetTop + 10) brake = 0.8;
+
+        // Anticipate sharper curves by looking 1 waypoint ahead
+        const nextIdx = (car.nextWaypoint + 1) % waypoints.length;
+        const nextWp = waypoints[nextIdx];
+        if (nextWp) {
+            const angleToNext = Phaser.Math.Angle.Between(sprite.x, sprite.y, nextWp.x, nextWp.y);
+            const curvature = Math.abs(Phaser.Math.Angle.Wrap(angleToNext - targetAngle));
+            if (curvature > 0.8) throttle = Math.min(throttle, 0.6);
+            if (curvature > 1.1) throttle = Math.min(throttle, 0.4);
+        }
+
+        // Proximity awareness: if another car is close in front, lift and bias steer slightly away
+        const lead = this.findLeadCarAhead(car, 240, Math.PI / 3);
+        if (lead) {
+            throttle = Math.min(throttle, 0.6);
+            const relAngle = Phaser.Math.Angle.Between(sprite.x, sprite.y, lead.sprite.x, lead.sprite.y) - sprite.rotation;
+            const away = Phaser.Math.Angle.Wrap(relAngle) > 0 ? -0.25 : 0.25;
+            meta.steer = Phaser.Math.Clamp(Phaser.Math.Linear(meta.steer, meta.steer + away * 0.35, 0.25), -1, 1);
+            if (speedMph > targetTop - 2) brake = Math.max(brake, 0.2);
+        }
 
         const jitter = randRange(-profile.jitter, profile.jitter);
         throttle = Phaser.Math.Clamp((throttle + jitter) * profile.throttleScale, 0, 1.2);
@@ -462,6 +495,26 @@ export class GameScene extends Phaser.Scene {
         };
     }
 
+    findLeadCarAhead(car, distance = 220, halfFov = Math.PI / 3) {
+        const sprite = car.sprite;
+        let best = null;
+        let bestDist = Infinity;
+        for (const other of this.racers) {
+            if (other === car || other.retired) continue;
+            const dx = other.sprite.x - sprite.x;
+            const dy = other.sprite.y - sprite.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > distance) continue;
+            const ang = Math.atan2(dy, dx);
+            const diff = Math.abs(Phaser.Math.Angle.Wrap(ang - sprite.rotation));
+            if (diff <= halfFov && dist < bestDist) {
+                best = other;
+                bestDist = dist;
+            }
+        }
+        return best;
+    }
+
     constrainCarToTrack(car) {
         if (!car || this.trackId !== 'daytona') return;
         const cfg = this.trackConfig;
@@ -473,18 +526,19 @@ export class GameScene extends Phaser.Scene {
         const innerB = cfg.innerRadiusY + 80;
         const innerValue = (dx * dx) / (innerA * innerA) + (dy * dy) / (innerB * innerB);
 
-        if (innerValue < 1) {
+    if (innerValue < 1) {
             const factor = 1 / Math.sqrt(innerValue);
             const targetX = cfg.centerX + dx * factor * 1.02;
             const targetY = cfg.centerY + dy * factor * 1.02;
 
             sprite.setPosition(targetX, targetY);
             sprite.body.position.set(targetX - sprite.body.halfWidth, targetY - sprite.body.halfHeight);
-            sprite.body.velocity.set(sprite.body.velocity.x * 0.6, sprite.body.velocity.y * -0.1);
+            // Softer inner correction to reduce oscillations
+            sprite.body.velocity.set(sprite.body.velocity.x * 0.75, sprite.body.velocity.y * 0.2);
 
-            car.localVelocity.x *= 0.6;
-            car.localVelocity.y *= -0.35;
-            car.angularVelocity *= 0.25;
+            car.localVelocity.x *= 0.8;
+            car.localVelocity.y *= 0.4;
+            car.angularVelocity *= 0.35;
 
             this.registerBoundaryHit(car, 'inner');
         }
@@ -493,18 +547,19 @@ export class GameScene extends Phaser.Scene {
         const outerB = cfg.outerRadiusY - 160;
         const outerValue = (dx * dx) / (outerA * outerA) + (dy * dy) / (outerB * outerB);
 
-        if (outerValue > 1) {
+    if (outerValue > 1) {
             const factor = 1 / Math.sqrt(outerValue);
             const targetX = cfg.centerX + dx * factor * 0.98;
             const targetY = cfg.centerY + dy * factor * 0.98;
 
             sprite.setPosition(targetX, targetY);
             sprite.body.position.set(targetX - sprite.body.halfWidth, targetY - sprite.body.halfHeight);
-            sprite.body.velocity.set(sprite.body.velocity.x * -0.25, sprite.body.velocity.y * 0.35);
+            // Softer outer correction
+            sprite.body.velocity.set(sprite.body.velocity.x * 0.2, sprite.body.velocity.y * 0.5);
 
-            car.localVelocity.x *= -0.35;
-            car.localVelocity.y *= 0.2;
-            car.angularVelocity *= 0.3;
+            car.localVelocity.x *= 0.5;
+            car.localVelocity.y *= 0.4;
+            car.angularVelocity *= 0.45;
 
             this.registerBoundaryHit(car, 'outer');
         }

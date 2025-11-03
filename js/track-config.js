@@ -23,7 +23,7 @@ const createDaytonaConfig = () => {
         waypoints.push({ x, y });
     }
 
-    const laneSpacing = 200;
+        const laneSpacing = 220; // wider grid to reduce lap-1 pileups
     const startY = centerY + midRadiusY - 210;
     const laneOffsets = [-1.5, -0.5, 0.5, 1.5];
     const startPositions = laneOffsets.map((offset) => ({
