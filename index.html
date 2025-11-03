@@ -363,17 +363,30 @@
                 const mphScale = (this.carData.topSpeedMph || 65) / this.carData.topSpeed; // mph per px/s
                 const currentMph = Math.abs(this.playerSpeed) * mphScale;
                 if ((Math.abs(steerInput) > 0 && currentMph > 17) || handbrake) {
-                    // Lateral direction (90° left of forward)
-                    const lateralX = -forwardY;
-                    const lateralY = forwardX;
-                    // Scale slip with speed above threshold and steering amount
-                    const slipFactor = Phaser.Math.Clamp((currentMph - 17) / ((this.carData.topSpeedMph || 65) - 17), 0, 1);
-                    let slipStrength = 0.50 * slipFactor; // slightly stronger baseline slip at speed
-                    if (handbrake) slipStrength += 0.70;  // stronger extra slip when handbrake
-                    slipStrength = Phaser.Math.Clamp(slipStrength, 0, 0.98);
-                    const steer = (steerInput === 0 && handbrake) ? 1 : steerInput; // allow slip even if not steering
-                    vx += lateralX * this.playerSpeed * slipStrength * steer;
-                    vy += lateralY * this.playerSpeed * slipStrength * steer;
+                    // Determine slip direction from steering (or angular velocity if no steer while handbraking)
+                    const prevRot = (this.lastRotation === undefined) ? this.player.rotation : this.lastRotation;
+                    const angVel = Phaser.Math.Angle.Wrap(this.player.rotation - prevRot) / Math.max(dt, 1e-4);
+                    this.lastRotation = this.player.rotation;
+
+                    // Right-normal (90° clockwise from forward). Positive steer -> right, negative -> left.
+                    const rightNormX = forwardY;
+                    const rightNormY = -forwardX;
+
+                    // Direction sign: prefer current steering; else use sign of angular velocity; else no added slip
+                    let slipDir = 0;
+                    if (steerInput !== 0) slipDir = Math.sign(steerInput);
+                    else if (handbrake && Math.abs(angVel) > 0.01) slipDir = Math.sign(angVel);
+
+                    if (slipDir !== 0) {
+                        // Scale slip with speed above threshold and optionally handbrake
+                        const slipFactor = Phaser.Math.Clamp((currentMph - 17) / ((this.carData.topSpeedMph || 65) - 17), 0, 1);
+                        let slipStrength = 0.50 * slipFactor; // baseline slip at speed
+                        if (handbrake) slipStrength += 0.70;   // extra slip when handbrake
+                        slipStrength = Phaser.Math.Clamp(slipStrength, 0, 0.98);
+
+                        vx += rightNormX * this.playerSpeed * slipStrength * slipDir;
+                        vy += rightNormY * this.playerSpeed * slipStrength * slipDir;
+                    }
                 }
 
                 this.player.setVelocity(vx, vy);
