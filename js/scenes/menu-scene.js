@@ -50,14 +50,6 @@ export class MenuScene extends Phaser.Scene {
             fill: '#ffffff'
         }).setOrigin(0.5);
 
-        // Settings button in top-right corner
-        const settingsBtn = this.createButton(1120, 50, 120, 48, '⚙️ Settings', () => this.openSettings(), {
-            fontSize: '16px'
-        });
-        settingsBtn.setDepth(100); // Ensure it's on top
-        console.log('Settings button created at', settingsBtn.x, settingsBtn.y);
-        // Button is already added to scene via this.add.container in createButton
-
         // Create modals
         console.log('Creating CustomizeCarModal...');
         this.customizeCarModal = new CustomizeCarModal(this);
@@ -124,22 +116,28 @@ export class MenuScene extends Phaser.Scene {
             .setStrokeStyle(3, 0x1a7be1, 0.6);
         panel.add(backdrop);
 
+        // Settings button in top-right of panel
+        const settingsBtn = this.createButton(panelWidth / 2 - 100, -panelHeight / 2 + 30, 160, 46, '⚙️ Settings', () => this.openSettings(), {
+            fontSize: '18px'
+        });
+        panel.add(settingsBtn);
+
         // Current Car Display (read-only)
-        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 30, 'SELECTED CAR', {
+        const carLabel = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 30, 'SELECTED CAR', {
             fontFamily: 'Arial Black',
             fontSize: '24px',
             fill: '#ffd700'
-        }).setOrigin(0, 0.5).setDepth(10).setScrollFactor(0);
+        }).setOrigin(0, 0.5);
+        panel.add(carLabel);
 
         this.carSummaryText = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 72, '', {
             fontFamily: 'Arial',
             fontSize: '20px',
             fill: '#ffffff'
         }).setOrigin(0, 0.5);
-
         panel.add(this.carSummaryText);
 
-        const customizeHint = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 100, '(Open Settings to customize your car)', {
+        const customizeHint = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 100, '(Click Settings to customize your car)', {
             fontFamily: 'Arial',
             fontSize: '14px',
             fill: '#8fa8cc',
@@ -148,11 +146,12 @@ export class MenuScene extends Phaser.Scene {
         panel.add(customizeHint);
 
         // Track section
-        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 140, 'TRACK PRESET', {
+        const trackLabel = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 140, 'TRACK PRESET', {
             fontFamily: 'Arial Black',
             fontSize: '24px',
             fill: '#ffd700'
         }).setOrigin(0, 0.5);
+        panel.add(trackLabel);
 
         const trackEntries = Object.values(TRACKS);
         const baseTrackX = -panelWidth / 2 + 120;
@@ -163,11 +162,12 @@ export class MenuScene extends Phaser.Scene {
         });
 
         // AI section
-        this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 300, 'BOT GRID', {
+        const aiLabel = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 300, 'BOT GRID', {
             fontFamily: 'Arial Black',
             fontSize: '24px',
             fill: '#ffd700'
         }).setOrigin(0, 0.5);
+        panel.add(aiLabel);
 
         this.aiInfoText = this.add.text(-panelWidth / 2 + 36, -panelHeight / 2 + 342, '', {
             fontFamily: 'Arial',
