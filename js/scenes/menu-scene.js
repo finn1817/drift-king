@@ -1,4 +1,7 @@
 // js/scenes/menu-scene.js
+// VERSION: 2.0 - Settings Modal Update (Nov 3, 2025)
+console.log('🚀 MenuScene v2.0 loaded - Settings Modal & Advanced Customization');
+
 import { getCarDisplayName, getDefaultSchemeId } from '../car-presets.js';
 import { TRACKS } from '../track-config.js';
 import { ensureGameTextures } from '../texture-factory.js';
